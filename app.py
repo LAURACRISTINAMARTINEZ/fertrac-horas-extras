@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from datetime import datetime, date
+from datetime import datetime, date, time
 import matplotlib.pyplot as plt
 from io import BytesIO
 
@@ -13,7 +13,6 @@ st.set_page_config(
     page_icon="🕒"
 )
 
-# Mostrar el logo y título
 st.image("logo_fertrac.png", width=200)
 st.markdown(
     "<h2 style='color:#f37021;'>Bienvenido a la herramienta de cálculo de horas extras de Fertrac.</h2>"
@@ -21,7 +20,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Subida de archivos
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -38,7 +36,7 @@ if input_file and empleados_file and porcentaje_file:
     df_empleados = pd.read_excel(empleados_file)
     df_porcentaje = pd.read_excel(porcentaje_file)
 
-    # Limpieza de columnas
+    # Normalizar columnas
     df_input.columns = df_input.columns.str.upper().str.strip()
     df_empleados.columns = df_empleados.columns.str.upper().str.strip()
     df_porcentaje.columns = df_porcentaje.columns.str.upper().str.strip()
@@ -46,34 +44,64 @@ if input_file and empleados_file and porcentaje_file:
     # Merge con empleados
     df = df_input.merge(df_empleados, left_on="CÉDULA", right_on="CEDULA", how="left")
 
-    # Conversión de horas
+    # Procesamiento de fechas y horas
+    df["FECHA"] = pd.to_datetime(df["FECHA"])
+    df["DIA_SEMANA"] = df["FECHA"].dt.day_name(locale='es_ES.utf8')  # Día en español
+
     df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"].astype(str)).dt.time
     df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"].astype(str)).dt.time
 
-    df["HORAS TRABAJADAS"] = (
-        pd.to_datetime(df["HORA SALIDA"].astype(str)) - pd.to_datetime(df["HRA INGRESO"].astype(str))
-    ).dt.total_seconds() / 3600
+    # Convertir a datetime completo para cálculo
+    def convertir_a_datetime(fecha, hora):
+        return pd.to_datetime(fecha.astype(str) + ' ' + hora.astype(str))
 
-    df["HORAS EXTRA"] = df["HORAS TRABAJADAS"].clip(lower=0) - 8
-    df["HORAS EXTRA"] = df["HORAS EXTRA"].clip(lower=0)
+    df["DT_INGRESO"] = convertir_a_datetime(df["FECHA"], df["HRA INGRESO"])
+    df["DT_SALIDA"] = convertir_a_datetime(df["FECHA"], df["HORA SALIDA"])
 
+    # Definir fin de jornada y hora de almuerzo
+    def hora_fin_jornada(fecha):
+        return datetime.combine(fecha, time(12, 0)) if fecha.weekday() == 5 else datetime.combine(fecha, time(18, 0))
+
+    def calcular_horas_extras(row):
+        ingreso = row["DT_INGRESO"]
+        salida = row["DT_SALIDA"]
+        dia = ingreso.weekday()
+
+        if dia == 5:  # sábado
+            fin = datetime.combine(row["FECHA"], time(12, 0))
+            return max((salida - fin).total_seconds() / 3600, 0)
+        else:
+            fin = datetime.combine(row["FECHA"], time(18, 0))
+            return max((salida - fin).total_seconds() / 3600, 0)
+
+    # Calcular horas trabajadas reales (descontando almuerzo si aplica)
+    def calcular_trabajo_real(row):
+        ingreso = row["DT_INGRESO"]
+        salida = row["DT_SALIDA"]
+        dia = ingreso.weekday()
+
+        total = (salida - ingreso).total_seconds() / 3600
+        return total - 1 if dia < 5 else total
+
+    df["HORAS TRABAJADAS"] = df.apply(calcular_trabajo_real, axis=1)
+    df["HORAS EXTRA"] = df.apply(calcular_horas_extras, axis=1)
+
+    # Asumimos tipo "Extra Diurna" por defecto
     df["TIPO EXTRA"] = "Extra Diurna"
     factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper(), df_porcentaje["FACTOR"]))
     df["FACTOR"] = df["TIPO EXTRA"].map(lambda x: factor_map.get(x.upper(), 1.0))
 
-    # Cálculo corregido: Importe Hora Base con 230
+    # Importe hora base corregido
     df["IMPORTE HORA"] = df["SALARIO BASICO"] / 230
-
-    # Valor de las horas extra
     df["VALOR EXTRA"] = df["HORAS EXTRA"] * df["IMPORTE HORA"] * df["FACTOR"]
-
-    # Total a pagar = solo horas extra + comisión
     df["VALOR TOTAL A PAGAR"] = df["VALOR EXTRA"] + df["COMISIÓN O BONIFICACIÓN"]
 
-    # Redondear resultados
+    # Redondeo
+    df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
     df["VALOR EXTRA"] = df["VALOR EXTRA"].round(2)
     df["VALOR TOTAL A PAGAR"] = df["VALOR TOTAL A PAGAR"].round(2)
-    df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
+    df["HORAS TRABAJADAS"] = df["HORAS TRABAJADAS"].round(2)
+    df["HORAS EXTRA"] = df["HORAS EXTRA"].round(2)
 
     # Mostrar tabla
     st.subheader("📊 Resultados del cálculo")
