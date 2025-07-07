@@ -61,9 +61,19 @@ if input_file and empleados_file and porcentaje_file:
     factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper(), df_porcentaje["FACTOR"]))
     df["FACTOR"] = df["TIPO EXTRA"].map(lambda x: factor_map.get(x.upper(), 1.0))
 
-    df["IMPORTE HORA"] = df["SALARIO BASICO"] / (30 * 8)
+    # Cálculo corregido: Importe Hora Base con 230
+    df["IMPORTE HORA"] = df["SALARIO BASICO"] / 230
+
+    # Valor de las horas extra
     df["VALOR EXTRA"] = df["HORAS EXTRA"] * df["IMPORTE HORA"] * df["FACTOR"]
+
+    # Total a pagar = solo horas extra + comisión
     df["VALOR TOTAL A PAGAR"] = df["VALOR EXTRA"] + df["COMISIÓN O BONIFICACIÓN"]
+
+    # Redondear resultados
+    df["VALOR EXTRA"] = df["VALOR EXTRA"].round(2)
+    df["VALOR TOTAL A PAGAR"] = df["VALOR TOTAL A PAGAR"].round(2)
+    df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
 
     # Mostrar tabla
     st.subheader("📊 Resultados del cálculo")
