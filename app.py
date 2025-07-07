@@ -6,7 +6,6 @@ from datetime import datetime, date, time
 import matplotlib.pyplot as plt
 from io import BytesIO
 
-# Configuración de la página
 st.set_page_config(
     page_title="Calculadora Horas Extras Fertrac",
     layout="wide",
@@ -46,26 +45,21 @@ if input_file and empleados_file and porcentaje_file:
 
     # Procesamiento de fechas y horas
     df["FECHA"] = pd.to_datetime(df["FECHA"])
-    df["DIA_SEMANA"] = df["FECHA"].dt.day_name(locale='es_ES.utf8')  # Día en español
+    df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb
 
     df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"].astype(str)).dt.time
     df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"].astype(str)).dt.time
 
-    # Convertir a datetime completo para cálculo
     def convertir_a_datetime(fecha, hora):
         return pd.to_datetime(fecha.astype(str) + ' ' + hora.astype(str))
 
     df["DT_INGRESO"] = convertir_a_datetime(df["FECHA"], df["HRA INGRESO"])
     df["DT_SALIDA"] = convertir_a_datetime(df["FECHA"], df["HORA SALIDA"])
 
-    # Definir fin de jornada y hora de almuerzo
-    def hora_fin_jornada(fecha):
-        return datetime.combine(fecha, time(12, 0)) if fecha.weekday() == 5 else datetime.combine(fecha, time(18, 0))
-
     def calcular_horas_extras(row):
         ingreso = row["DT_INGRESO"]
         salida = row["DT_SALIDA"]
-        dia = ingreso.weekday()
+        dia = row["DIA_NUM"]
 
         if dia == 5:  # sábado
             fin = datetime.combine(row["FECHA"], time(12, 0))
@@ -74,11 +68,10 @@ if input_file and empleados_file and porcentaje_file:
             fin = datetime.combine(row["FECHA"], time(18, 0))
             return max((salida - fin).total_seconds() / 3600, 0)
 
-    # Calcular horas trabajadas reales (descontando almuerzo si aplica)
     def calcular_trabajo_real(row):
         ingreso = row["DT_INGRESO"]
         salida = row["DT_SALIDA"]
-        dia = ingreso.weekday()
+        dia = row["DIA_NUM"]
 
         total = (salida - ingreso).total_seconds() / 3600
         return total - 1 if dia < 5 else total
@@ -86,42 +79,35 @@ if input_file and empleados_file and porcentaje_file:
     df["HORAS TRABAJADAS"] = df.apply(calcular_trabajo_real, axis=1)
     df["HORAS EXTRA"] = df.apply(calcular_horas_extras, axis=1)
 
-    # Asumimos tipo "Extra Diurna" por defecto
     df["TIPO EXTRA"] = "Extra Diurna"
     factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper(), df_porcentaje["FACTOR"]))
     df["FACTOR"] = df["TIPO EXTRA"].map(lambda x: factor_map.get(x.upper(), 1.0))
 
-    # Importe hora base corregido
     df["IMPORTE HORA"] = df["SALARIO BASICO"] / 230
     df["VALOR EXTRA"] = df["HORAS EXTRA"] * df["IMPORTE HORA"] * df["FACTOR"]
     df["VALOR TOTAL A PAGAR"] = df["VALOR EXTRA"] + df["COMISIÓN O BONIFICACIÓN"]
 
-    # Redondeo
     df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
     df["VALOR EXTRA"] = df["VALOR EXTRA"].round(2)
     df["VALOR TOTAL A PAGAR"] = df["VALOR TOTAL A PAGAR"].round(2)
     df["HORAS TRABAJADAS"] = df["HORAS TRABAJADAS"].round(2)
     df["HORAS EXTRA"] = df["HORAS EXTRA"].round(2)
 
-    # Mostrar tabla
     st.subheader("📊 Resultados del cálculo")
     st.dataframe(df)
 
-    # Gráfico por persona
     st.subheader("👤 Horas extra por empleado")
     fig1, ax1 = plt.subplots(figsize=(10, 4))
     df.groupby("NOMBRE")["HORAS EXTRA"].sum().plot(kind='bar', ax=ax1, color='#f37021')
     ax1.set_ylabel("Horas Extra")
     st.pyplot(fig1)
 
-    # Gráfico por área
     st.subheader("🏢 Horas extra por área")
     fig2, ax2 = plt.subplots(figsize=(8, 4))
     df.groupby("AREA")["HORAS EXTRA"].sum().plot(kind='barh', ax=ax2, color='#f37021')
     ax2.set_xlabel("Horas Extra")
     st.pyplot(fig2)
 
-    # Descargar archivo
     hoy = date.today().isoformat()
     output_filename = f"resultado_pagos_{hoy}.xlsx"
     towrite = BytesIO()
