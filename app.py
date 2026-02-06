@@ -40,8 +40,39 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df_porcentaje.columns = df_porcentaje.columns.str.upper().str.strip()
     df_turnos.columns = df_turnos.columns.str.upper().str.strip()
 
+    # Normalizar nombres de columnas de cédula
+    # El archivo de input puede tener "CÉDULA" y el de empleados "CEDULA"
+    if "CÉDULA" in df_input.columns:
+        cedula_input = "CÉDULA"
+    elif "CEDULA" in df_input.columns:
+        cedula_input = "CEDULA"
+    else:
+        st.error("⚠️ Error: No se encontró columna de cédula en archivo de datos")
+        st.info("La columna debe llamarse 'CÉDULA' o 'CEDULA'")
+        st.stop()
+    
+    if "CEDULA" in df_empleados.columns:
+        cedula_empleados = "CEDULA"
+    elif "CÉDULA" in df_empleados.columns:
+        cedula_empleados = "CÉDULA"
+    else:
+        st.error("⚠️ Error: No se encontró columna de cédula en base de empleados")
+        st.info("La columna debe llamarse 'CEDULA' o 'CÉDULA'")
+        st.stop()
+    
+    # Convertir cédulas a string para evitar problemas de tipo
+    df_input[cedula_input] = df_input[cedula_input].astype(str).str.strip()
+    df_empleados[cedula_empleados] = df_empleados[cedula_empleados].astype(str).str.strip()
+    
     # Merge con empleados
-    df = df_input.merge(df_empleados, left_on="CÉDULA", right_on="CEDULA", how="left")
+    df = df_input.merge(df_empleados, left_on=cedula_input, right_on=cedula_empleados, how="left")
+    
+    # Verificar que se hayan encontrado coincidencias
+    empleados_sin_info = df[df["NOMBRE"].isna()]
+    if len(empleados_sin_info) > 0:
+        st.warning(f"⚠️ Advertencia: {len(empleados_sin_info)} registros no tienen información de empleado")
+        st.warning(f"Cédulas sin coincidencia: {empleados_sin_info[cedula_input].unique().tolist()[:5]}")
+        st.info("Verifica que las cédulas en ambos archivos coincidan exactamente")
 
     # Procesamiento de fechas y horas
     df["FECHA"] = pd.to_datetime(df["FECHA"])
