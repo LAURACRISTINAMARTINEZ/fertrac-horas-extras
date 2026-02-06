@@ -75,16 +75,34 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.info("Verifica que las cédulas en ambos archivos coincidan exactamente")
 
     # Procesamiento de fechas y horas
-    df["FECHA"] = pd.to_datetime(df["FECHA"])
-    df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb, 6=Dom
+    try:
+        df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce')
+        
+        # Verificar que las fechas se convirtieron correctamente
+        if df["FECHA"].isna().any():
+            fechas_problema = df[df["FECHA"].isna()].index.tolist()
+            st.error(f"⚠️ Error: Algunas fechas no tienen el formato correcto en las filas: {fechas_problema[:5]}")
+            st.info("Las fechas deben estar en formato: YYYY-MM-DD (ej: 2025-02-04) o DD/MM/YYYY")
+            st.stop()
+        
+        df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb, 6=Dom
+    except Exception as e:
+        st.error(f"⚠️ Error al procesar fechas: {str(e)}")
+        st.info("Verifica que la columna FECHA tenga fechas válidas")
+        st.stop()
 
-    df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"], errors='coerce').dt.time
-    df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"], errors='coerce').dt.time
-    
-    # Verificar que las conversiones fueron exitosas
-    if df["HRA INGRESO"].isna().any() or df["HORA SALIDA"].isna().any():
-        st.error("⚠️ Error: Algunas horas de entrada o salida no tienen el formato correcto")
-        st.info("Asegúrate de que las horas estén en formato: HH:MM (ej: 08:00, 14:00, 18:30)")
+    try:
+        df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"], errors='coerce').dt.time
+        df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"], errors='coerce').dt.time
+        
+        # Verificar que las conversiones fueron exitosas
+        if df["HRA INGRESO"].isna().any() or df["HORA SALIDA"].isna().any():
+            st.error("⚠️ Error: Algunas horas de entrada o salida no tienen el formato correcto")
+            st.info("Asegúrate de que las horas estén en formato: HH:MM (ej: 08:00, 14:00, 18:30)")
+            st.stop()
+    except Exception as e:
+        st.error(f"⚠️ Error al procesar horas: {str(e)}")
+        st.info("Verifica el formato de las columnas HRA INGRESO y HORA SALIDA")
         st.stop()
 
     def convertir_a_datetime(fecha, hora):
