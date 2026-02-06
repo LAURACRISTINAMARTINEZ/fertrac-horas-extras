@@ -515,14 +515,24 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     with col_desc1:
         st.markdown("### 📥 Descargar datos completos en Excel")
         st.markdown("Incluye todos los cálculos y resultados detallados")
+        
+        # Crear el archivo Excel en memoria
         hoy = date.today().isoformat()
         output_filename = f"resultado_pagos_{hoy}.xlsx"
-        towrite = BytesIO()
-        df.to_excel(towrite, index=False, engine='openpyxl')
-        towrite.seek(0)
+        
+        # Usar BytesIO para crear el archivo en memoria
+        buffer = BytesIO()
+        
+        # Escribir el DataFrame a Excel
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Resultados', index=False)
+        
+        # Posicionar el cursor al inicio del buffer
+        buffer.seek(0)
+        
         st.download_button(
-            label="📥 Descargar archivo Excel completo",
-            data=towrite,
+            label="📥 Descargar archivo Excel completo (.xlsx)",
+            data=buffer,
             file_name=output_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="download_excel"
