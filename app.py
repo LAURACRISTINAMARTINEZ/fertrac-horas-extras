@@ -520,22 +520,22 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         hoy = date.today().isoformat()
         output_filename = f"resultado_pagos_{hoy}.xlsx"
         
-        # Usar BytesIO para crear el archivo en memoria
-        buffer = BytesIO()
+        # IMPORTANTE: No usar extensión .csv en ningún lado
+        # Crear buffer y escribir directamente con ExcelWriter
+        excel_buffer = BytesIO()
         
-        # Escribir el DataFrame a Excel
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Resultados', index=False)
+        # Forzar escritura en formato Excel
+        df.to_excel(excel_buffer, index=False, sheet_name='Resultados', engine='openpyxl')
+        excel_buffer.seek(0)
         
-        # Posicionar el cursor al inicio del buffer
-        buffer.seek(0)
-        
+        # Asegurar que el MIME type sea Excel
         st.download_button(
-            label="📥 Descargar archivo Excel completo (.xlsx)",
-            data=buffer,
+            label="📥 Descargar Excel (.XLSX)",
+            data=excel_buffer.getvalue(),
             file_name=output_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_excel"
+            key="download_excel",
+            help="Descarga el archivo en formato Excel (.xlsx)"
         )
     
     with col_desc2:
