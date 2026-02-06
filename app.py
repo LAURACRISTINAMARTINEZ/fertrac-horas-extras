@@ -233,6 +233,18 @@ if input_file and empleados_file and porcentaje_file:
             plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
             st.pyplot(fig1)
+            
+            # Botón para descargar gráfico
+            buf1 = BytesIO()
+            fig1.savefig(buf1, format='png', dpi=300, bbox_inches='tight')
+            buf1.seek(0)
+            st.download_button(
+                label="📊 Descargar gráfico empleados",
+                data=buf1,
+                file_name=f"grafico_empleados_{date.today().isoformat()}.png",
+                mime="image/png",
+                key="download_empleados"
+            )
         else:
             st.info("No hay datos para mostrar con los filtros seleccionados")
 
@@ -250,6 +262,18 @@ if input_file and empleados_file and porcentaje_file:
             ax2.legend(["Horas Extra Diurnas", "Recargo Nocturno"])
             plt.tight_layout()
             st.pyplot(fig2)
+            
+            # Botón para descargar gráfico
+            buf2 = BytesIO()
+            fig2.savefig(buf2, format='png', dpi=300, bbox_inches='tight')
+            buf2.seek(0)
+            st.download_button(
+                label="📊 Descargar gráfico áreas",
+                data=buf2,
+                file_name=f"grafico_areas_{date.today().isoformat()}.png",
+                mime="image/png",
+                key="download_areas"
+            )
         else:
             st.info("No hay datos para mostrar con los filtros seleccionados")
 
@@ -286,11 +310,22 @@ if input_file and empleados_file and porcentaje_file:
         ax3.legend()
         plt.tight_layout()
         st.pyplot(fig3)
+        
+        # Botón para descargar gráfico de horas
+        buf3 = BytesIO()
+        fig3.savefig(buf3, format='png', dpi=300, bbox_inches='tight')
+        buf3.seek(0)
+        st.download_button(
+            label="📊 Descargar gráfico de horas",
+            data=buf3,
+            file_name=f"grafico_horas_mensual_{date.today().isoformat()}.png",
+            mime="image/png"
+        )
     
     with col_comp2:
         st.markdown("#### Costos por mes")
         fig4, ax4 = plt.subplots(figsize=(10, 6))
-        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR_EXTRA"], 
+        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR EXTRA"], 
                 marker='o', linewidth=2, markersize=8, color='#f37021', label='Valor Extras')
         ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR TOTAL A PAGAR"], 
                 marker='s', linewidth=2, markersize=8, color='#ff9966', label='Total a Pagar')
@@ -301,6 +336,17 @@ if input_file and empleados_file and porcentaje_file:
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         st.pyplot(fig4)
+        
+        # Botón para descargar gráfico de costos
+        buf4 = BytesIO()
+        fig4.savefig(buf4, format='png', dpi=300, bbox_inches='tight')
+        buf4.seek(0)
+        st.download_button(
+            label="📊 Descargar gráfico de costos",
+            data=buf4,
+            file_name=f"grafico_costos_mensual_{date.today().isoformat()}.png",
+            mime="image/png"
+        )
     
     # Tabla comparativa mensual
     st.markdown("#### Tabla comparativa mensual")
@@ -333,15 +379,33 @@ if input_file and empleados_file and porcentaje_file:
     with col_stat4:
         st.metric("Total General", f"${df_filtrado['VALOR TOTAL A PAGAR'].sum():,.2f}")
 
-    # Descarga
-    hoy = date.today().isoformat()
-    output_filename = f"resultado_pagos_{hoy}.xlsx"
-    towrite = BytesIO()
-    df.to_excel(towrite, index=False, engine='openpyxl')
-    towrite.seek(0)
-    st.download_button(
-        label="📥 Descargar archivo Excel con resultados",
-        data=towrite,
-        file_name=output_filename,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    # Descarga de resultados
+    st.subheader("💾 Descargar resultados")
+    
+    col_desc1, col_desc2 = st.columns(2)
+    
+    with col_desc1:
+        st.markdown("### 📥 Descargar datos completos en Excel")
+        st.markdown("Incluye todos los cálculos y resultados detallados")
+        hoy = date.today().isoformat()
+        output_filename = f"resultado_pagos_{hoy}.xlsx"
+        towrite = BytesIO()
+        df.to_excel(towrite, index=False, engine='openpyxl')
+        towrite.seek(0)
+        st.download_button(
+            label="📥 Descargar archivo Excel completo",
+            data=towrite,
+            file_name=output_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_excel"
+        )
+    
+    with col_desc2:
+        st.markdown("### 📊 Todas las gráficas ya tienen su botón")
+        st.markdown("""
+        Cada gráfico tiene su propio botón de descarga:
+        - Gráfico de empleados
+        - Gráfico de áreas  
+        - Gráfico de horas mensuales
+        - Gráfico de costos mensuales
+        """)
