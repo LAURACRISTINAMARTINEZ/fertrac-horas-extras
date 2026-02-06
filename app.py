@@ -47,8 +47,14 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df["FECHA"] = pd.to_datetime(df["FECHA"])
     df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb, 6=Dom
 
-    df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"].astype(str)).dt.time
-    df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"].astype(str)).dt.time
+    df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"], errors='coerce').dt.time
+    df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"], errors='coerce').dt.time
+    
+    # Verificar que las conversiones fueron exitosas
+    if df["HRA INGRESO"].isna().any() or df["HORA SALIDA"].isna().any():
+        st.error("⚠️ Error: Algunas horas de entrada o salida no tienen el formato correcto")
+        st.info("Asegúrate de que las horas estén en formato: HH:MM (ej: 08:00, 14:00, 18:30)")
+        st.stop()
 
     def convertir_a_datetime(fecha, hora):
         return pd.to_datetime(fecha.astype(str) + ' ' + hora.astype(str))
@@ -60,12 +66,33 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     turnos_config = {}
     for _, row in df_turnos.iterrows():
         turno_nombre = str(row["TURNO"]).upper().strip()
-        hora_entrada = pd.to_datetime(row["HORA ENTRADA"]).time()
-        hora_salida = pd.to_datetime(row["HORA SALIDA"]).time()
-        turnos_config[turno_nombre] = {
-            "entrada": hora_entrada,
-            "salida": hora_salida
-        }
+        
+        # Convertir horas de manera segura
+        try:
+            # Si ya es un objeto time, usarlo directamente
+            if isinstance(row["HORA ENTRADA"], time):
+                hora_entrada = row["HORA ENTRADA"]
+            else:
+                # Convertir a datetime y extraer time
+                hora_entrada = pd.to_datetime(str(row["HORA ENTRADA"])).time()
+            
+            if isinstance(row["HORA SALIDA"], time):
+                hora_salida = row["HORA SALIDA"]
+            else:
+                hora_salida = pd.to_datetime(str(row["HORA SALIDA"])).time()
+            
+            turnos_config[turno_nombre] = {
+                "entrada": hora_entrada,
+                "salida": hora_salida
+            }
+        except Exception as e:
+            st.error(f"Error procesando turno {turno_nombre}: {e}")
+            continue
+    
+    # Verificar que se cargaron turnos
+    if not turnos_config:
+        st.error("⚠️ No se pudo cargar ningún turno del archivo de configuración")
+        st.stop()
     
     # Mostrar configuración de turnos cargada
     st.success(f"""
