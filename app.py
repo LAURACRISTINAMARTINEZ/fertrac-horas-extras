@@ -446,15 +446,22 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     with col_comp2:
         st.markdown("#### Costos por mes")
         fig4, ax4 = plt.subplots(figsize=(10, 6))
-        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR EXTRA"], 
-                marker='o', linewidth=2, markersize=8, color='#f37021', label='Valor Extras')
-        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR TOTAL A PAGAR"], 
-                marker='s', linewidth=2, markersize=8, color='#ff9966', label='Total a Pagar')
+        
+        # Gráfico de barras agrupadas en lugar de líneas
+        x = range(len(comparativo_mensual))
+        width = 0.35
+        
+        ax4.bar([i - width/2 for i in x], comparativo_mensual["VALOR EXTRA"], 
+                width, label='Valor Extras', color='#f37021')
+        ax4.bar([i + width/2 for i in x], comparativo_mensual["VALOR TOTAL A PAGAR"], 
+                width, label='Total a Pagar', color='#ff9966')
+        
         ax4.set_xlabel('Mes')
         ax4.set_ylabel('Valor ($)')
+        ax4.set_xticks(x)
+        ax4.set_xticklabels(comparativo_mensual["MES_NOMBRE"], rotation=45, ha='right')
         ax4.legend()
-        plt.xticks(rotation=45, ha='right')
-        plt.grid(True, alpha=0.3)
+        plt.grid(True, alpha=0.3, axis='y')
         plt.tight_layout()
         st.pyplot(fig4)
         
