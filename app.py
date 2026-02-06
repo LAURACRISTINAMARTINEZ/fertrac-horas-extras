@@ -18,26 +18,27 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     input_file = st.file_uploader("📤 Subir archivo de datos (input_datos.xlsx)", type=["xlsx"], key="input")
-
-with col2:
     empleados_file = st.file_uploader("📤 Subir base de empleados", type=["xlsx"], key="empleados")
 
-with col3:
+with col2:
     porcentaje_file = st.file_uploader("📤 Subir factores de horas extras (%)", type=["xlsx"], key="porcentaje")
+    turnos_file = st.file_uploader("📤 Subir configuración de turnos", type=["xlsx"], key="turnos")
 
-if input_file and empleados_file and porcentaje_file:
+if input_file and empleados_file and porcentaje_file and turnos_file:
     df_input = pd.read_excel(input_file)
     df_empleados = pd.read_excel(empleados_file)
     df_porcentaje = pd.read_excel(porcentaje_file)
+    df_turnos = pd.read_excel(turnos_file)
 
     # Normalizar columnas
     df_input.columns = df_input.columns.str.upper().str.strip()
     df_empleados.columns = df_empleados.columns.str.upper().str.strip()
     df_porcentaje.columns = df_porcentaje.columns.str.upper().str.strip()
+    df_turnos.columns = df_turnos.columns.str.upper().str.strip()
 
     # Merge con empleados
     df = df_input.merge(df_empleados, left_on="CÉDULA", right_on="CEDULA", how="left")
@@ -55,25 +56,53 @@ if input_file and empleados_file and porcentaje_file:
     df["DT_INGRESO"] = convertir_a_datetime(df["FECHA"], df["HRA INGRESO"])
     df["DT_SALIDA"] = convertir_a_datetime(df["FECHA"], df["HORA SALIDA"])
 
-    # Definir horarios de fin según turno
-    def obtener_hora_fin_jornada(row):
-        """Retorna la hora de fin de jornada según el turno y día"""
-        turno = row.get("TURNO", "TURNO 1").upper()
+    # Crear diccionario de configuración de turnos
+    turnos_config = {}
+    for _, row in df_turnos.iterrows():
+        turno_nombre = str(row["TURNO"]).upper().strip()
+        hora_entrada = pd.to_datetime(row["HORA ENTRADA"]).time()
+        hora_salida = pd.to_datetime(row["HORA SALIDA"]).time()
+        turnos_config[turno_nombre] = {
+            "entrada": hora_entrada,
+            "salida": hora_salida
+        }
+    
+    # Mostrar configuración de turnos cargada
+    st.success(f"""
+    ✅ **Configuración de turnos cargada:**
+    {chr(10).join([f"- {turno}: {config['entrada'].strftime('%H:%M')} a {config['salida'].strftime('%H:%M')}" 
+                   for turno, config in turnos_config.items()])}
+    """)
+
+    # Definir horarios según turno (usando configuración)
+    def obtener_horarios_turno(row):
+        """Retorna las horas de entrada y salida según la configuración del turno"""
+        turno = row.get("TURNO", "TURNO 1").upper().strip()
         dia = row["DIA_NUM"]
         
-        if dia == 5:  # Sábado
-            return datetime.combine(row["FECHA"], time(12, 0))
-        else:  # Lunes a viernes
-            if turno == "TURNO 2":
-                return datetime.combine(row["FECHA"], time(22, 0))  # 10 PM
-            else:  # TURNO 1 (por defecto)
-                return datetime.combine(row["FECHA"], time(18, 0))  # 6 PM
+        # Si el turno existe en la configuración, usar esos horarios
+        if turno in turnos_config:
+            hora_entrada = datetime.combine(row["FECHA"], turnos_config[turno]["entrada"])
+            hora_salida = datetime.combine(row["FECHA"], turnos_config[turno]["salida"])
+        else:
+            # Si no está configurado, usar valores por defecto de TURNO 1
+            st.warning(f"⚠️ Turno '{turno}' no encontrado en configuración. Usando TURNO 1 por defecto.")
+            hora_entrada = datetime.combine(row["FECHA"], time(8, 0))
+            hora_salida = datetime.combine(row["FECHA"], time(18, 0))
+        
+        # Ajuste para sábados: jornada termina a las 12 PM
+        if dia == 5:
+            hora_salida = datetime.combine(row["FECHA"], time(12, 0))
+        
+        return hora_entrada, hora_salida
 
     def calcular_horas_extras_y_recargo(row):
         """Calcula horas extras y recargo nocturno por separado"""
         ingreso = row["DT_INGRESO"]
         salida = row["DT_SALIDA"]
-        fin_jornada = obtener_hora_fin_jornada(row)
+        
+        # Obtener horarios esperados del turno
+        hora_entrada_esperada, hora_salida_esperada = obtener_horarios_turno(row)
         
         # Definir límites de recargo nocturno (7 PM - 9 PM)
         inicio_nocturno = datetime.combine(row["FECHA"], time(19, 0))
@@ -82,18 +111,18 @@ if input_file and empleados_file and porcentaje_file:
         horas_extra = 0
         recargo_nocturno = 0
         
-        # Si salió después de la jornada
-        if salida > fin_jornada:
-            tiempo_despues_jornada = (salida - fin_jornada).total_seconds() / 3600
+        # Si salió después de la hora esperada
+        if salida > hora_salida_esperada:
+            tiempo_despues_jornada = (salida - hora_salida_esperada).total_seconds() / 3600
             
             # Separar en horas extras y recargo nocturno
             if salida > inicio_nocturno:
                 # Parte antes de 7 PM = horas extras normales
-                if fin_jornada < inicio_nocturno:
-                    horas_extra = (inicio_nocturno - fin_jornada).total_seconds() / 3600
+                if hora_salida_esperada < inicio_nocturno:
+                    horas_extra = (inicio_nocturno - hora_salida_esperada).total_seconds() / 3600
                 
                 # Parte entre 7 PM y 9 PM = recargo nocturno
-                inicio_recargo = max(fin_jornada, inicio_nocturno)
+                inicio_recargo = max(hora_salida_esperada, inicio_nocturno)
                 fin_recargo = min(salida, fin_nocturno)
                 if fin_recargo > inicio_recargo:
                     recargo_nocturno = (fin_recargo - inicio_recargo).total_seconds() / 3600
@@ -174,7 +203,8 @@ if input_file and empleados_file and porcentaje_file:
     - División por **220 horas** mensuales (vigente desde 2do semestre 2025)
     - Descuento de **1 hora de almuerzo** en días de lunes a viernes
     - **Recargo nocturno** de 7 PM a 9 PM con factor diferenciado
-    - Soporte para **Turno 1** (hasta 6 PM) y **Turno 2** (hasta 10 PM)
+    - **Turnos configurables** según archivo de configuración cargado
+    - Los horarios de cada turno se toman del archivo de configuración de turnos
     """)
 
     # Agregar columna de mes y año para análisis temporal
@@ -202,18 +232,33 @@ if input_file and empleados_file and porcentaje_file:
 
     st.subheader("📊 Resultados del cálculo")
     
-    # Columnas a mostrar
+    # Columnas a mostrar con desglose detallado
     columnas_mostrar = [
         "FECHA", "NOMBRE", "CÉDULA", "AREA", "TURNO", 
         "HRA INGRESO", "HORA SALIDA", "HORAS TRABAJADAS",
-        "HORAS EXTRA", "RECARGO NOCTURNO", "ACTIVIDAD DESARROLLADA",
-        "SALARIO BASICO", "IMPORTE HORA", "VALOR EXTRA DIURNA",
-        "VALOR RECARGO NOCTURNO", "VALOR EXTRA", "VALOR TOTAL A PAGAR"
+        "HORAS EXTRA", "VALOR EXTRA DIURNA",      # Horas extra diurnas y su valor juntas
+        "RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",  # Recargo nocturno y su valor juntas
+        "ACTIVIDAD DESARROLLADA",
+        "SALARIO BASICO", "IMPORTE HORA",
+        "VALOR EXTRA", "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR"
     ]
     
     # Filtrar solo las columnas que existen
     columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
-    st.dataframe(df_filtrado[columnas_disponibles], use_container_width=True)
+    
+    # Crear copia para formatear la visualización
+    df_display = df_filtrado[columnas_disponibles].copy()
+    
+    # Formatear valores monetarios para mejor visualización
+    columnas_dinero = ["VALOR EXTRA DIURNA", "VALOR RECARGO NOCTURNO", "VALOR EXTRA", 
+                       "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR", "SALARIO BASICO", "IMPORTE HORA"]
+    
+    for col in columnas_dinero:
+        if col in df_display.columns:
+            df_display[col] = df_display[col].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
+    
+    # Mostrar tabla con formato mejorado
+    st.dataframe(df_display, use_container_width=True)
 
     # Visualizaciones
     col_viz1, col_viz2 = st.columns(2)
