@@ -177,6 +177,29 @@ if input_file and empleados_file and porcentaje_file:
     - Soporte para **Turno 1** (hasta 6 PM) y **Turno 2** (hasta 10 PM)
     """)
 
+    # Agregar columna de mes y año para análisis temporal
+    df["MES"] = df["FECHA"].dt.to_period('M')
+    df["MES_NOMBRE"] = df["FECHA"].dt.strftime('%B %Y')
+
+    # FILTRO POR ÁREA
+    st.subheader("🔍 Filtros de visualización")
+    col_filtro1, col_filtro2 = st.columns(2)
+    
+    with col_filtro1:
+        areas_disponibles = ["Todas las áreas"] + sorted(df["AREA"].unique().tolist())
+        area_seleccionada = st.selectbox("Seleccionar área:", areas_disponibles)
+    
+    with col_filtro2:
+        meses_disponibles = ["Todos los meses"] + sorted(df["MES_NOMBRE"].unique().tolist())
+        mes_seleccionado = st.selectbox("Seleccionar mes:", meses_disponibles)
+    
+    # Aplicar filtros
+    df_filtrado = df.copy()
+    if area_seleccionada != "Todas las áreas":
+        df_filtrado = df_filtrado[df_filtrado["AREA"] == area_seleccionada]
+    if mes_seleccionado != "Todos los meses":
+        df_filtrado = df_filtrado[df_filtrado["MES_NOMBRE"] == mes_seleccionado]
+
     st.subheader("📊 Resultados del cálculo")
     
     # Columnas a mostrar
@@ -189,8 +212,8 @@ if input_file and empleados_file and porcentaje_file:
     ]
     
     # Filtrar solo las columnas que existen
-    columnas_disponibles = [col for col in columnas_mostrar if col in df.columns]
-    st.dataframe(df[columnas_disponibles])
+    columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
+    st.dataframe(df_filtrado[columnas_disponibles], use_container_width=True)
 
     # Visualizaciones
     col_viz1, col_viz2 = st.columns(2)
@@ -198,47 +221,117 @@ if input_file and empleados_file and porcentaje_file:
     with col_viz1:
         st.subheader("👤 Horas extra por empleado")
         fig1, ax1 = plt.subplots(figsize=(10, 6))
-        empleado_stats = df.groupby("NOMBRE").agg({
+        empleado_stats = df_filtrado.groupby("NOMBRE").agg({
             "HORAS EXTRA": "sum",
             "RECARGO NOCTURNO": "sum"
         })
-        empleado_stats.plot(kind='bar', ax=ax1, color=['#f37021', '#ff9966'], stacked=True)
-        ax1.set_ylabel("Horas")
-        ax1.set_xlabel("Empleado")
-        ax1.legend(["Horas Extra Diurnas", "Recargo Nocturno"])
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-        st.pyplot(fig1)
+        if not empleado_stats.empty:
+            empleado_stats.plot(kind='bar', ax=ax1, color=['#f37021', '#ff9966'], stacked=True)
+            ax1.set_ylabel("Horas")
+            ax1.set_xlabel("Empleado")
+            ax1.legend(["Horas Extra Diurnas", "Recargo Nocturno"])
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            st.pyplot(fig1)
+        else:
+            st.info("No hay datos para mostrar con los filtros seleccionados")
 
     with col_viz2:
         st.subheader("🏢 Horas extra por área")
         fig2, ax2 = plt.subplots(figsize=(10, 6))
-        area_stats = df.groupby("AREA").agg({
+        area_stats = df_filtrado.groupby("AREA").agg({
             "HORAS EXTRA": "sum",
             "RECARGO NOCTURNO": "sum"
         })
-        area_stats.plot(kind='barh', ax=ax2, color=['#f37021', '#ff9966'], stacked=True)
-        ax2.set_xlabel("Horas")
-        ax2.set_ylabel("Área")
-        ax2.legend(["Horas Extra Diurnas", "Recargo Nocturno"])
-        plt.tight_layout()
-        st.pyplot(fig2)
+        if not area_stats.empty:
+            area_stats.plot(kind='barh', ax=ax2, color=['#f37021', '#ff9966'], stacked=True)
+            ax2.set_xlabel("Horas")
+            ax2.set_ylabel("Área")
+            ax2.legend(["Horas Extra Diurnas", "Recargo Nocturno"])
+            plt.tight_layout()
+            st.pyplot(fig2)
+        else:
+            st.info("No hay datos para mostrar con los filtros seleccionados")
 
-    # Resumen estadístico
+    # COMPARATIVO MENSUAL
+    st.subheader("📅 Comparativo mensual")
+    
+    # Agrupar por mes
+    comparativo_mensual = df.groupby("MES_NOMBRE").agg({
+        "HORAS EXTRA": "sum",
+        "RECARGO NOCTURNO": "sum",
+        "VALOR EXTRA": "sum",
+        "VALOR TOTAL A PAGAR": "sum"
+    }).reset_index()
+    
+    # Ordenar por fecha
+    comparativo_mensual["ORDEN"] = pd.to_datetime(comparativo_mensual["MES_NOMBRE"], format='%B %Y')
+    comparativo_mensual = comparativo_mensual.sort_values("ORDEN")
+    
+    col_comp1, col_comp2 = st.columns(2)
+    
+    with col_comp1:
+        st.markdown("#### Horas por mes")
+        fig3, ax3 = plt.subplots(figsize=(10, 6))
+        x = range(len(comparativo_mensual))
+        width = 0.35
+        ax3.bar([i - width/2 for i in x], comparativo_mensual["HORAS EXTRA"], 
+                width, label='Horas Extra Diurnas', color='#f37021')
+        ax3.bar([i + width/2 for i in x], comparativo_mensual["RECARGO NOCTURNO"], 
+                width, label='Recargo Nocturno', color='#ff9966')
+        ax3.set_xlabel('Mes')
+        ax3.set_ylabel('Horas')
+        ax3.set_xticks(x)
+        ax3.set_xticklabels(comparativo_mensual["MES_NOMBRE"], rotation=45, ha='right')
+        ax3.legend()
+        plt.tight_layout()
+        st.pyplot(fig3)
+    
+    with col_comp2:
+        st.markdown("#### Costos por mes")
+        fig4, ax4 = plt.subplots(figsize=(10, 6))
+        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR_EXTRA"], 
+                marker='o', linewidth=2, markersize=8, color='#f37021', label='Valor Extras')
+        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR TOTAL A PAGAR"], 
+                marker='s', linewidth=2, markersize=8, color='#ff9966', label='Total a Pagar')
+        ax4.set_xlabel('Mes')
+        ax4.set_ylabel('Valor ($)')
+        ax4.legend()
+        plt.xticks(rotation=45, ha='right')
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        st.pyplot(fig4)
+    
+    # Tabla comparativa mensual
+    st.markdown("#### Tabla comparativa mensual")
+    tabla_comparativa = comparativo_mensual[["MES_NOMBRE", "HORAS EXTRA", "RECARGO NOCTURNO", 
+                                             "VALOR EXTRA", "VALOR TOTAL A PAGAR"]].copy()
+    tabla_comparativa.columns = ["Mes", "Horas Extra", "Recargo Nocturno", 
+                                  "Valor Extras ($)", "Total a Pagar ($)"]
+    
+    # Formatear valores monetarios
+    tabla_comparativa["Valor Extras ($)"] = tabla_comparativa["Valor Extras ($)"].apply(lambda x: f"${x:,.2f}")
+    tabla_comparativa["Total a Pagar ($)"] = tabla_comparativa["Total a Pagar ($)"].apply(lambda x: f"${x:,.2f}")
+    tabla_comparativa["Horas Extra"] = tabla_comparativa["Horas Extra"].apply(lambda x: f"{x:.2f}")
+    tabla_comparativa["Recargo Nocturno"] = tabla_comparativa["Recargo Nocturno"].apply(lambda x: f"{x:.2f}")
+    
+    st.dataframe(tabla_comparativa, use_container_width=True, hide_index=True)
+
+    # Resumen estadístico (con datos filtrados)
     st.subheader("📈 Resumen general")
     col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
     
     with col_stat1:
-        st.metric("Total Horas Extra Diurnas", f"{df['HORAS EXTRA'].sum():.2f}")
+        st.metric("Total Horas Extra Diurnas", f"{df_filtrado['HORAS EXTRA'].sum():.2f}")
     
     with col_stat2:
-        st.metric("Total Recargo Nocturno", f"{df['RECARGO NOCTURNO'].sum():.2f}")
+        st.metric("Total Recargo Nocturno", f"{df_filtrado['RECARGO NOCTURNO'].sum():.2f}")
     
     with col_stat3:
-        st.metric("Total a Pagar Extras", f"${df['VALOR EXTRA'].sum():,.2f}")
+        st.metric("Total a Pagar Extras", f"${df_filtrado['VALOR EXTRA'].sum():,.2f}")
     
     with col_stat4:
-        st.metric("Total General", f"${df['VALOR TOTAL A PAGAR'].sum():,.2f}")
+        st.metric("Total General", f"${df_filtrado['VALOR TOTAL A PAGAR'].sum():,.2f}")
 
     # Descarga
     hoy = date.today().isoformat()
