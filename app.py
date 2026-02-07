@@ -211,6 +211,23 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         return hora_entrada, hora_salida
 
+    # ============================================================================
+    # FUNCIÓN CORREGIDA - Comparación de horas sin confundir fechas
+    # ============================================================================
+    def es_horario_nocturno(hora):
+        """
+        Determina si una hora (objeto time) está en horario nocturno.
+        Horario nocturno: 19:00 (7 PM) a 06:00 (6 AM)
+        
+        CORRECCIÓN: Compara solo las HORAS, no fechas completas.
+        """
+        # Extraer solo la hora si es datetime
+        if isinstance(hora, datetime):
+            hora = hora.time()
+        
+        # Nocturno: >= 19:00 (7 PM en adelante) O < 06:00 (antes de 6 AM)
+        return hora >= time(19, 0) or hora < time(6, 0)
+
     def calcular_horas_extras_y_recargo(row):
         """
         Calcula horas extras diurnas, nocturnas y recargo nocturno por separado
@@ -229,13 +246,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         # Obtener horarios del turno
         hora_entrada_esperada, hora_salida_esperada = obtener_horarios_turno(row)
         
-        # Límites de horario nocturno (7 PM - 6 AM)
+        # Límites de horario nocturno para cálculos de recargo (7 PM - 6 AM)
         inicio_noche = datetime.combine(row["FECHA"], time(19, 0))  # 7 PM
-        fin_noche = datetime.combine(row["FECHA"], time(6, 0))      # 6 AM del día siguiente
-        
-        # Si fin_noche es 6 AM, ajustar al día siguiente
-        if fin_noche < inicio_noche:
-            fin_noche = fin_noche.replace(day=fin_noche.day + 1)
         
         horas_extra_diurna = 0
         horas_extra_nocturna = 0
@@ -272,32 +284,40 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         if ingreso_real < hora_entrada_esperada:
             tiempo_antes = (hora_entrada_esperada - ingreso_real).total_seconds() / 3600
             
-            # Verificar si esas horas son diurnas o nocturnas
-            # De ingreso_real hasta hora_entrada_esperada
-            if ingreso_real >= inicio_noche or ingreso_real < fin_noche:
+            # ============================================================
+            # CORRECCIÓN: Usar la función es_horario_nocturno() que compara
+            # solo las HORAS, no fechas completas
+            # ============================================================
+            hora_ingreso = ingreso_real.time()
+            hora_entrada = hora_entrada_esperada.time()
+            
+            if es_horario_nocturno(hora_ingreso):
                 # Empezó en horario nocturno
-                # Calcular cuánto fue nocturno y cuánto diurno
-                if hora_entrada_esperada <= fin_noche:
-                    # Todo fue nocturno
-                    horas_extra_nocturna += tiempo_antes
-                else:
-                    # Parte nocturno, parte diurno
-                    if ingreso_real < fin_noche:
-                        # Desde ingreso hasta 6 AM = nocturno
-                        horas_extra_nocturna += (fin_noche - ingreso_real).total_seconds() / 3600
-                        # Desde 6 AM hasta entrada = diurno
-                        horas_extra_diurna += (hora_entrada_esperada - fin_noche).total_seconds() / 3600
+                # Verificar si todo el tiempo antes es nocturno o hay parte diurna
+                
+                if hora_ingreso < time(6, 0):
+                    # Llegó entre 00:00 y 06:00 (madrugada)
+                    if hora_entrada <= time(6, 0):
+                        # Todo fue nocturno (entrada también antes de 6 AM)
+                        horas_extra_nocturna += tiempo_antes
                     else:
-                        # Todo diurno
-                        horas_extra_diurna += tiempo_antes
+                        # Parte nocturno (hasta 6 AM), parte diurno (6 AM hasta entrada)
+                        limite_6am = datetime.combine(row["FECHA"], time(6, 0))
+                        nocturno = (limite_6am - ingreso_real).total_seconds() / 3600
+                        diurno = (hora_entrada_esperada - limite_6am).total_seconds() / 3600
+                        horas_extra_nocturna += max(nocturno, 0)
+                        horas_extra_diurna += max(diurno, 0)
+                else:
+                    # Llegó después de las 19:00 (noche)
+                    # Todo es nocturno hasta medianoche, luego sigue nocturno hasta 6 AM
+                    horas_extra_nocturna += tiempo_antes
             else:
-                # Empezó en horario diurno
+                # Empezó en horario diurno (entre 6 AM y 7 PM)
+                # Verificar si cruza hacia horario nocturno (poco probable si llegó antes)
                 horas_extra_diurna += tiempo_antes
         
         # 2. SALIÓ DESPUÉS de la hora de salida
         if salida_real > hora_salida_esperada:
-            tiempo_despues = (salida_real - hora_salida_esperada).total_seconds() / 3600
-            
             # Verificar si esas horas son diurnas o nocturnas
             # De hora_salida_esperada hasta salida_real
             
@@ -308,8 +328,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 # Determinar si este momento es nocturno o diurno
                 hora_del_dia = tiempo_actual.time()
                 
-                # Nocturno: 19:00 - 23:59 y 00:00 - 05:59
-                if hora_del_dia >= time(19, 0) or hora_del_dia < time(6, 0):
+                # Usar la función corregida para verificar si es nocturno
+                if es_horario_nocturno(hora_del_dia):
                     # Es nocturno
                     # Encontrar hasta cuándo es nocturno
                     if hora_del_dia >= time(19, 0):
