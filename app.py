@@ -92,13 +92,37 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.stop()
 
     try:
-        df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"], errors='coerce').dt.time
-        df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"], errors='coerce').dt.time
+        # Función para convertir horas de cualquier formato a time
+        def convertir_a_time(valor):
+            if pd.isna(valor):
+                return None
+            # Si ya es un objeto time, devolverlo
+            if isinstance(valor, time):
+                return valor
+            # Si es datetime, extraer solo la hora
+            if isinstance(valor, datetime):
+                return valor.time()
+            # Si es string, intentar parsearlo
+            if isinstance(valor, str):
+                try:
+                    # Intentar parsear como HH:MM o HH:MM:SS
+                    parsed = pd.to_datetime(valor, format='%H:%M', errors='coerce')
+                    if pd.isna(parsed):
+                        parsed = pd.to_datetime(valor, format='%H:%M:%S', errors='coerce')
+                    if not pd.isna(parsed):
+                        return parsed.time()
+                except:
+                    pass
+            return None
+        
+        # Convertir horas usando la función robusta
+        df["HRA INGRESO"] = df["HRA INGRESO"].apply(convertir_a_time)
+        df["HORA SALIDA"] = df["HORA SALIDA"].apply(convertir_a_time)
         
         # Verificar que las conversiones fueron exitosas
         if df["HRA INGRESO"].isna().any() or df["HORA SALIDA"].isna().any():
             st.error("⚠️ Error: Algunas horas de entrada o salida no tienen el formato correcto")
-            st.info("Asegúrate de que las horas estén en formato: HH:MM (ej: 08:00, 14:00, 18:30)")
+            st.info("Las horas pueden estar en formato Excel (tiempo) o texto HH:MM (ej: 08:00, 14:00, 18:30)")
             st.stop()
     except Exception as e:
         st.error(f"⚠️ Error al procesar horas: {str(e)}")
@@ -116,19 +140,28 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     for _, row in df_turnos.iterrows():
         turno_nombre = str(row["TURNO"]).upper().strip()
         
-        # Convertir horas de manera segura
+        # Convertir horas de manera segura (acepta time, datetime, o string)
         try:
-            # Si ya es un objeto time, usarlo directamente
-            if isinstance(row["HORA ENTRADA"], time):
-                hora_entrada = row["HORA ENTRADA"]
-            else:
-                # Convertir a datetime y extraer time
-                hora_entrada = pd.to_datetime(str(row["HORA ENTRADA"])).time()
+            # Función para convertir a time
+            def a_time(valor):
+                if isinstance(valor, time):
+                    return valor
+                if isinstance(valor, datetime):
+                    return valor.time()
+                if isinstance(valor, str):
+                    parsed = pd.to_datetime(valor, format='%H:%M', errors='coerce')
+                    if pd.isna(parsed):
+                        parsed = pd.to_datetime(valor, format='%H:%M:%S', errors='coerce')
+                    if not pd.isna(parsed):
+                        return parsed.time()
+                return None
             
-            if isinstance(row["HORA SALIDA"], time):
-                hora_salida = row["HORA SALIDA"]
-            else:
-                hora_salida = pd.to_datetime(str(row["HORA SALIDA"])).time()
+            hora_entrada = a_time(row["HORA ENTRADA"])
+            hora_salida = a_time(row["HORA SALIDA"])
+            
+            if hora_entrada is None or hora_salida is None:
+                st.warning(f"⚠️ Advertencia: Turno '{turno_nombre}' tiene formato de hora inválido, se omitirá")
+                continue
             
             turnos_config[turno_nombre] = {
                 "entrada": hora_entrada,
