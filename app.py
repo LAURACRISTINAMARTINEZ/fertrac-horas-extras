@@ -67,6 +67,12 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Merge con empleados
     df = df_input.merge(df_empleados, left_on=cedula_input, right_on=cedula_empleados, how="left")
     
+    # Agregar columna OBSERVACIONES si no existe en el input
+    if "OBSERVACIONES" not in df.columns and "OBSERVACION" not in df.columns:
+        df["OBSERVACIONES"] = ""  # Columna vacía por defecto
+    elif "OBSERVACION" in df.columns:
+        df["OBSERVACIONES"] = df["OBSERVACION"]  # Renombrar si existe con otro nombre
+    
     # Verificar que se hayan encontrado coincidencias
     empleados_sin_info = df[df["NOMBRE"].isna()]
     if len(empleados_sin_info) > 0:
@@ -744,35 +750,151 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         hoy = date.today().isoformat()
         output_filename = f"resultado_pagos_{hoy}.xlsx"
         
-        # Preparar DataFrame para exportar (convertir tipos problemáticos)
-        df_export = df.copy()
+        # Preparar DataFrame para exportar con columnas en el orden exacto solicitado
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, Border, Side
         
-        # Convertir específicamente las columnas de tiempo a string
-        time_columns = ["HRA INGRESO", "HORA SALIDA", "TURNO ENTRADA", "TURNO SALIDA"]
-        for col in time_columns:
-            if col in df_export.columns:
-                df_export[col] = df_export[col].apply(lambda x: x.strftime('%H:%M') if hasattr(x, 'strftime') else str(x))
+        # Crear workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Resultados"
         
-        # Convertir fechas a formato string también
-        if "FECHA" in df_export.columns:
-            df_export["FECHA"] = df_export["FECHA"].apply(lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else str(x))
+        # Definir encabezados en el orden EXACTO solicitado
+        headers = [
+            "CÉDULA", "NOMBRE", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
+            "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "TURNO",
+            "TURNO ENTRADA", "TURNO SALIDA", "DT_INGRESO", "DT_SALIDA",
+            "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
+            "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
+            "Cant. HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",
+            "Cant. RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",
+            "TOTAL HORAS EXTRA", "VALOR TOTAL A PAGAR",
+            "MES", "MES_NOMBRE", "Observacion"
+        ]
         
-        # Convertir cualquier otra columna problemática
-        for col in df_export.columns:
-            if df_export[col].dtype == 'object':
-                try:
-                    # Verificar si hay objetos time o datetime
-                    sample = df_export[col].dropna().iloc[0] if len(df_export[col].dropna()) > 0 else None
-                    if sample and hasattr(sample, 'strftime'):
-                        df_export[col] = df_export[col].apply(lambda x: x.strftime('%H:%M:%S') if hasattr(x, 'strftime') else str(x))
-                except:
-                    pass
+        ws.append(headers)
         
-        # Crear buffer y escribir Excel con pandas
+        # Formatear encabezados - BLANCO Y NEGRO (sin colores)
+        header_font = Font(bold=True, size=11)
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+        
+        # Mapeo de columnas del DataFrame a los encabezados
+        column_mapping = {
+            "CÉDULA": "CÉDULA",
+            "NOMBRE": "NOMBRE",
+            "AREA": "AREA",
+            "SALARIO BASICO": "SALARIO BASICO",
+            "COMISIÓN O BONIFICACIÓN": "COMISIÓN O BONIFICACIÓN",
+            "TOTAL BASE LIQUIDACION": "VALOR TOTAL A PAGAR",  # Calculado
+            "Valor Ordinario Hora": "IMPORTE HORA",
+            "FECHA": "FECHA",
+            "TURNO": "TURNO",
+            "TURNO ENTRADA": "TURNO ENTRADA",
+            "TURNO SALIDA": "TURNO SALIDA",
+            "DT_INGRESO": "HRA INGRESO",
+            "DT_SALIDA": "HORA SALIDA",
+            "ACTIVIDAD DESARROLLADA": "ACTIVIDAD DESARROLLADA",
+            "HORAS TRABAJADAS": "HORAS TRABAJADAS",
+            "Cant. HORAS EXTRA DIURNA": "HORAS EXTRA DIURNA",
+            "VALOR EXTRA DIURNA": "VALOR EXTRA DIURNA",
+            "Cant. HORAS EXTRA NOCTURNA": "HORAS EXTRA NOCTURNA",
+            "VALOR EXTRA NOCTURNA": "VALOR EXTRA NOCTURNA",
+            "Cant. RECARGO NOCTURNO": "RECARGO NOCTURNO",
+            "VALOR RECARGO NOCTURNO": "VALOR RECARGO NOCTURNO",
+            "TOTAL HORAS EXTRA": "TOTAL HORAS EXTRA",
+            "VALOR TOTAL A PAGAR": "VALOR TOTAL A PAGAR",
+            "MES": "MES",
+            "MES_NOMBRE": "MES_NOMBRE",
+            "Observacion": "OBSERVACIONES"  # Nueva columna
+        }
+        
+        # Escribir datos fila por fila
+        for idx, row in df.iterrows():
+            row_data = []
+            for header in headers:
+                df_col = column_mapping.get(header, header)
+                
+                if df_col in df.columns:
+                    value = row[df_col]
+                    
+                    # Convertir valores según tipo
+                    if pd.isna(value):
+                        row_data.append("")
+                    elif isinstance(value, (time, datetime)):
+                        if isinstance(value, datetime):
+                            row_data.append(value.strftime('%Y-%m-%d %H:%M'))
+                        else:
+                            row_data.append(value.strftime('%H:%M'))
+                    else:
+                        row_data.append(value)
+                else:
+                    # Columna no existe, poner vacío
+                    row_data.append("")
+            
+            ws.append(row_data)
+        
+        # Aplicar formato a todas las celdas
+        for row_idx in range(2, ws.max_row + 1):
+            for col_idx in range(1, len(headers) + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.border = border
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                
+                # Aplicar formato numérico según la columna
+                header_name = headers[col_idx - 1]
+                if "VALOR" in header_name or "SALARIO" in header_name or "TOTAL BASE" in header_name or "Valor Ordinario" in header_name:
+                    if isinstance(cell.value, (int, float)):
+                        cell.number_format = '#,##0.00'
+                elif "Cant." in header_name or "HORAS" in header_name:
+                    if isinstance(cell.value, (int, float)):
+                        cell.number_format = '0.00'
+        
+        # Ajustar anchos de columnas
+        column_widths = {
+            'A': 12,  # CÉDULA
+            'B': 25,  # NOMBRE
+            'C': 15,  # AREA
+            'D': 15,  # SALARIO BASICO
+            'E': 18,  # COMISIÓN
+            'F': 18,  # TOTAL BASE
+            'G': 15,  # Valor Hora
+            'H': 12,  # FECHA
+            'I': 22,  # TURNO
+            'J': 12,  # TURNO ENTRADA
+            'K': 12,  # TURNO SALIDA
+            'L': 12,  # DT_INGRESO
+            'M': 12,  # DT_SALIDA
+            'N': 30,  # ACTIVIDAD
+            'O': 12,  # HORAS TRAB
+            'P': 12,  # Cant Extra Diurna
+            'Q': 15,  # Valor Extra Diurna
+            'R': 12,  # Cant Extra Nocturna
+            'S': 15,  # Valor Extra Nocturna
+            'T': 12,  # Cant Recargo
+            'U': 15,  # Valor Recargo
+            'V': 12,  # Total Horas
+            'W': 18,  # Valor Total
+            'X': 10,  # MES
+            'Y': 15,  # MES_NOMBRE
+            'Z': 30,  # Observacion
+        }
+        
+        for col, width in column_widths.items():
+            ws.column_dimensions[col].width = width
+        
+        # Guardar en buffer
         excel_buffer = BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            df_export.to_excel(writer, sheet_name='Resultados', index=False)
-        
+        wb.save(excel_buffer)
         excel_buffer.seek(0)
         
         st.download_button(
