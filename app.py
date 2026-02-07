@@ -440,7 +440,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         "RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",       # Recargo nocturno
         "TOTAL HORAS EXTRA",                                 # Total de extras
         "ACTIVIDAD DESARROLLADA",
-        "SALARIO BASICO", "IMPORTE HORA",
         "VALOR EXTRA", "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR"
     ]
     
@@ -452,8 +451,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     # Formatear valores monetarios para mejor visualización
     columnas_dinero = ["VALOR EXTRA DIURNA", "VALOR EXTRA NOCTURNA", "VALOR RECARGO NOCTURNO", 
-                       "VALOR EXTRA", "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR", 
-                       "SALARIO BASICO", "IMPORTE HORA"]
+                       "VALOR EXTRA", "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR"]
     
     for col in columnas_dinero:
         if col in df_display.columns:
