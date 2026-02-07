@@ -40,70 +40,15 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df_porcentaje.columns = df_porcentaje.columns.str.upper().str.strip()
     df_turnos.columns = df_turnos.columns.str.upper().str.strip()
 
-    # Normalizar nombres de columnas de cédula
-    # El archivo de input puede tener "CÉDULA" y el de empleados "CEDULA"
-    if "CÉDULA" in df_input.columns:
-        cedula_input = "CÉDULA"
-    elif "CEDULA" in df_input.columns:
-        cedula_input = "CEDULA"
-    else:
-        st.error("⚠️ Error: No se encontró columna de cédula en archivo de datos")
-        st.info("La columna debe llamarse 'CÉDULA' o 'CEDULA'")
-        st.stop()
-    
-    if "CEDULA" in df_empleados.columns:
-        cedula_empleados = "CEDULA"
-    elif "CÉDULA" in df_empleados.columns:
-        cedula_empleados = "CÉDULA"
-    else:
-        st.error("⚠️ Error: No se encontró columna de cédula en base de empleados")
-        st.info("La columna debe llamarse 'CEDULA' o 'CÉDULA'")
-        st.stop()
-    
-    # Convertir cédulas a string para evitar problemas de tipo
-    df_input[cedula_input] = df_input[cedula_input].astype(str).str.strip()
-    df_empleados[cedula_empleados] = df_empleados[cedula_empleados].astype(str).str.strip()
-    
     # Merge con empleados
-    df = df_input.merge(df_empleados, left_on=cedula_input, right_on=cedula_empleados, how="left")
-    
-    # Verificar que se hayan encontrado coincidencias
-    empleados_sin_info = df[df["NOMBRE"].isna()]
-    if len(empleados_sin_info) > 0:
-        st.warning(f"⚠️ Advertencia: {len(empleados_sin_info)} registros no tienen información de empleado")
-        st.warning(f"Cédulas sin coincidencia: {empleados_sin_info[cedula_input].unique().tolist()[:5]}")
-        st.info("Verifica que las cédulas en ambos archivos coincidan exactamente")
+    df = df_input.merge(df_empleados, left_on="CÉDULA", right_on="CEDULA", how="left")
 
     # Procesamiento de fechas y horas
-    try:
-        df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce')
-        
-        # Verificar que las fechas se convirtieron correctamente
-        if df["FECHA"].isna().any():
-            fechas_problema = df[df["FECHA"].isna()].index.tolist()
-            st.error(f"⚠️ Error: Algunas fechas no tienen el formato correcto en las filas: {fechas_problema[:5]}")
-            st.info("Las fechas deben estar en formato: YYYY-MM-DD (ej: 2025-02-04) o DD/MM/YYYY")
-            st.stop()
-        
-        df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb, 6=Dom
-    except Exception as e:
-        st.error(f"⚠️ Error al procesar fechas: {str(e)}")
-        st.info("Verifica que la columna FECHA tenga fechas válidas")
-        st.stop()
+    df["FECHA"] = pd.to_datetime(df["FECHA"])
+    df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb, 6=Dom
 
-    try:
-        df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"], errors='coerce').dt.time
-        df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"], errors='coerce').dt.time
-        
-        # Verificar que las conversiones fueron exitosas
-        if df["HRA INGRESO"].isna().any() or df["HORA SALIDA"].isna().any():
-            st.error("⚠️ Error: Algunas horas de entrada o salida no tienen el formato correcto")
-            st.info("Asegúrate de que las horas estén en formato: HH:MM (ej: 08:00, 14:00, 18:30)")
-            st.stop()
-    except Exception as e:
-        st.error(f"⚠️ Error al procesar horas: {str(e)}")
-        st.info("Verifica el formato de las columnas HRA INGRESO y HORA SALIDA")
-        st.stop()
+    df["HRA INGRESO"] = pd.to_datetime(df["HRA INGRESO"].astype(str)).dt.time
+    df["HORA SALIDA"] = pd.to_datetime(df["HORA SALIDA"].astype(str)).dt.time
 
     def convertir_a_datetime(fecha, hora):
         return pd.to_datetime(fecha.astype(str) + ' ' + hora.astype(str))
@@ -115,33 +60,12 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     turnos_config = {}
     for _, row in df_turnos.iterrows():
         turno_nombre = str(row["TURNO"]).upper().strip()
-        
-        # Convertir horas de manera segura
-        try:
-            # Si ya es un objeto time, usarlo directamente
-            if isinstance(row["HORA ENTRADA"], time):
-                hora_entrada = row["HORA ENTRADA"]
-            else:
-                # Convertir a datetime y extraer time
-                hora_entrada = pd.to_datetime(str(row["HORA ENTRADA"])).time()
-            
-            if isinstance(row["HORA SALIDA"], time):
-                hora_salida = row["HORA SALIDA"]
-            else:
-                hora_salida = pd.to_datetime(str(row["HORA SALIDA"])).time()
-            
-            turnos_config[turno_nombre] = {
-                "entrada": hora_entrada,
-                "salida": hora_salida
-            }
-        except Exception as e:
-            st.error(f"Error procesando turno {turno_nombre}: {e}")
-            continue
-    
-    # Verificar que se cargaron turnos
-    if not turnos_config:
-        st.error("⚠️ No se pudo cargar ningún turno del archivo de configuración")
-        st.stop()
+        hora_entrada = pd.to_datetime(row["HORA ENTRADA"]).time()
+        hora_salida = pd.to_datetime(row["HORA SALIDA"]).time()
+        turnos_config[turno_nombre] = {
+            "entrada": hora_entrada,
+            "salida": hora_salida
+        }
     
     # Mostrar configuración de turnos cargada
     st.success(f"""
@@ -446,22 +370,15 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     with col_comp2:
         st.markdown("#### Costos por mes")
         fig4, ax4 = plt.subplots(figsize=(10, 6))
-        
-        # Gráfico de barras agrupadas en lugar de líneas
-        x = range(len(comparativo_mensual))
-        width = 0.35
-        
-        ax4.bar([i - width/2 for i in x], comparativo_mensual["VALOR EXTRA"], 
-                width, label='Valor Extras', color='#f37021')
-        ax4.bar([i + width/2 for i in x], comparativo_mensual["VALOR TOTAL A PAGAR"], 
-                width, label='Total a Pagar', color='#ff9966')
-        
+        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR EXTRA"], 
+                marker='o', linewidth=2, markersize=8, color='#f37021', label='Valor Extras')
+        ax4.plot(comparativo_mensual["MES_NOMBRE"], comparativo_mensual["VALOR TOTAL A PAGAR"], 
+                marker='s', linewidth=2, markersize=8, color='#ff9966', label='Total a Pagar')
         ax4.set_xlabel('Mes')
         ax4.set_ylabel('Valor ($)')
-        ax4.set_xticks(x)
-        ax4.set_xticklabels(comparativo_mensual["MES_NOMBRE"], rotation=45, ha='right')
         ax4.legend()
-        plt.grid(True, alpha=0.3, axis='y')
+        plt.xticks(rotation=45, ha='right')
+        plt.grid(True, alpha=0.3)
         plt.tight_layout()
         st.pyplot(fig4)
         
@@ -515,27 +432,17 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     with col_desc1:
         st.markdown("### 📥 Descargar datos completos en Excel")
         st.markdown("Incluye todos los cálculos y resultados detallados")
-        
-        # Crear el archivo Excel en memoria
         hoy = date.today().isoformat()
         output_filename = f"resultado_pagos_{hoy}.xlsx"
-        
-        # IMPORTANTE: No usar extensión .csv en ningún lado
-        # Crear buffer y escribir directamente con ExcelWriter
-        excel_buffer = BytesIO()
-        
-        # Forzar escritura en formato Excel
-        df.to_excel(excel_buffer, index=False, sheet_name='Resultados', engine='openpyxl')
-        excel_buffer.seek(0)
-        
-        # Asegurar que el MIME type sea Excel
+        towrite = BytesIO()
+        df.to_excel(towrite, index=False, engine='openpyxl')
+        towrite.seek(0)
         st.download_button(
-            label="📥 Descargar Excel (.XLSX)",
-            data=excel_buffer.getvalue(),
+            label="📥 Descargar archivo Excel completo",
+            data=towrite,
             file_name=output_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_excel",
-            help="Descarga el archivo en formato Excel (.xlsx)"
+            key="download_excel"
         )
     
     with col_desc2:
