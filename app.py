@@ -420,6 +420,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Valor total de extras
     df["VALOR EXTRA"] = df["VALOR EXTRA DIURNA"] + df["VALOR EXTRA NOCTURNA"] + df["VALOR RECARGO NOCTURNO"]
     df["VALOR TOTAL A PAGAR"] = df["VALOR EXTRA"] + df["COMISIÓN O BONIFICACIÓN"]
+    
+    # TOTAL BASE LIQUIDACION = SALARIO BASICO + COMISION O BONIFICACION
+    df["TOTAL BASE LIQUIDACION"] = df["SALARIO BASICO"] + df["COMISIÓN O BONIFICACIÓN"]
 
     # Redondear valores
     df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
@@ -428,6 +431,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df["VALOR RECARGO NOCTURNO"] = df["VALOR RECARGO NOCTURNO"].round(2)
     df["VALOR EXTRA"] = df["VALOR EXTRA"].round(2)
     df["VALOR TOTAL A PAGAR"] = df["VALOR TOTAL A PAGAR"].round(2)
+    df["TOTAL BASE LIQUIDACION"] = df["TOTAL BASE LIQUIDACION"].round(2)
     df["HORAS TRABAJADAS"] = df["HORAS TRABAJADAS"].round(2)
     df["HORAS EXTRA DIURNA"] = df["HORAS EXTRA DIURNA"].round(2)
     df["HORAS EXTRA NOCTURNA"] = df["HORAS EXTRA NOCTURNA"].round(2)
@@ -795,7 +799,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "AREA": "AREA",
             "SALARIO BASICO": "SALARIO BASICO",
             "COMISIÓN O BONIFICACIÓN": "COMISIÓN O BONIFICACIÓN",
-            "TOTAL BASE LIQUIDACION": "VALOR TOTAL A PAGAR",  # Calculado
+            "TOTAL BASE LIQUIDACION": "TOTAL BASE LIQUIDACION",  # Calculado arriba
             "Valor Ordinario Hora": "IMPORTE HORA",
             "FECHA": "FECHA",
             "TURNO": "TURNO",
