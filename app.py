@@ -827,7 +827,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 if df_col in df.columns:
                     value = row[df_col]
                     
-                    # Convertir valores según tipo
+                    # Convertir valores según tipo a tipos básicos de Python
                     if pd.isna(value):
                         row_data.append("")
                     elif isinstance(value, (time, datetime)):
@@ -835,8 +835,24 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                             row_data.append(value.strftime('%Y-%m-%d %H:%M'))
                         else:
                             row_data.append(value.strftime('%H:%M'))
+                    elif isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
+                        row_data.append(int(value))
+                    elif isinstance(value, (np.float64, np.float32, np.float16)):
+                        row_data.append(float(value))
+                    elif isinstance(value, (pd.Period,)):
+                        row_data.append(str(value))
+                    elif hasattr(value, 'item'):  # numpy types
+                        row_data.append(value.item())
                     else:
-                        row_data.append(value)
+                        # Convertir a string si es cualquier otro tipo
+                        try:
+                            # Intentar convertir a tipo básico
+                            if isinstance(value, (int, float, str, bool)):
+                                row_data.append(value)
+                            else:
+                                row_data.append(str(value))
+                        except:
+                            row_data.append(str(value))
                 else:
                     # Columna no existe, poner vacío
                     row_data.append("")
