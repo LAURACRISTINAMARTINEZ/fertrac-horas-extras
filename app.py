@@ -661,27 +661,40 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.markdown("### 📥 Descargar datos completos en Excel")
         st.markdown("Incluye todos los cálculos y resultados detallados")
         
-        # Importar openpyxl para crear Excel manualmente
-        from openpyxl import Workbook
-        from openpyxl.utils.dataframe import dataframe_to_rows
-        
-        # Crear workbook
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Resultados"
-        
-        # Escribir datos del DataFrame
-        for r in dataframe_to_rows(df, index=False, header=True):
-            ws.append(r)
-        
-        # Guardar en buffer
+        # Crear el archivo Excel en memoria usando pandas directamente
         hoy = date.today().isoformat()
-        excel_buffer = BytesIO()
-        wb.save(excel_buffer)
-        excel_buffer.seek(0)
-        
-        # Nombre del archivo SIN extensión (Streamlit la añade)
         output_filename = f"resultado_pagos_{hoy}.xlsx"
+        
+        # Preparar DataFrame para exportar (convertir tipos problemáticos)
+        df_export = df.copy()
+        
+        # Convertir específicamente las columnas de tiempo a string
+        time_columns = ["HRA INGRESO", "HORA SALIDA", "TURNO ENTRADA", "TURNO SALIDA"]
+        for col in time_columns:
+            if col in df_export.columns:
+                df_export[col] = df_export[col].apply(lambda x: x.strftime('%H:%M') if hasattr(x, 'strftime') else str(x))
+        
+        # Convertir fechas a formato string también
+        if "FECHA" in df_export.columns:
+            df_export["FECHA"] = df_export["FECHA"].apply(lambda x: x.strftime('%Y-%m-%d') if hasattr(x, 'strftime') else str(x))
+        
+        # Convertir cualquier otra columna problemática
+        for col in df_export.columns:
+            if df_export[col].dtype == 'object':
+                try:
+                    # Verificar si hay objetos time o datetime
+                    sample = df_export[col].dropna().iloc[0] if len(df_export[col].dropna()) > 0 else None
+                    if sample and hasattr(sample, 'strftime'):
+                        df_export[col] = df_export[col].apply(lambda x: x.strftime('%H:%M:%S') if hasattr(x, 'strftime') else str(x))
+                except:
+                    pass
+        
+        # Crear buffer y escribir Excel con pandas
+        excel_buffer = BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+            df_export.to_excel(writer, sheet_name='Resultados', index=False)
+        
+        excel_buffer.seek(0)
         
         st.download_button(
             label="📥 DESCARGAR EXCEL (.XLSX) ⬇️",
