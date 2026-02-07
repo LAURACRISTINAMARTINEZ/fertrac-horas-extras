@@ -678,7 +678,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
 
     # Resumen estadístico (con datos filtrados)
     st.subheader("📈 Resumen general")
-    col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
+    col_stat1, col_stat2, col_stat3, col_stat4, col_stat5, col_stat6 = st.columns(6)
     
     with col_stat1:
         st.metric("H. Extra Diurnas", f"{df_filtrado['HORAS EXTRA DIURNA'].sum():.2f}")
@@ -693,6 +693,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.metric("Total Extras ($)", f"${df_filtrado['VALOR EXTRA'].sum():,.2f}")
     
     with col_stat5:
+        st.metric("Total Bonificaciones ($)", f"${df_filtrado['COMISIÓN O BONIFICACIÓN'].sum():,.2f}")
+    
+    with col_stat6:
         st.metric("Total General ($)", f"${df_filtrado['VALOR TOTAL A PAGAR'].sum():,.2f}")
 
     # Descarga de resultados
