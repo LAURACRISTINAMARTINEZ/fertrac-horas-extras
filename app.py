@@ -440,7 +440,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         "RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",       # Recargo nocturno
         "TOTAL HORAS EXTRA",                                 # Total de extras
         "ACTIVIDAD DESARROLLADA",
-        "VALOR EXTRA", "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR"
+        "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR"
     ]
     
     # Filtrar solo las columnas que existen
@@ -449,9 +449,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Crear copia para formatear la visualización
     df_display = df_filtrado[columnas_disponibles].copy()
     
+    # Renombrar columna para claridad
+    if "VALOR TOTAL A PAGAR" in df_display.columns:
+        df_display = df_display.rename(columns={"VALOR TOTAL A PAGAR": "VALOR TOTAL EXTRA"})
+    
     # Formatear valores monetarios para mejor visualización
     columnas_dinero = ["VALOR EXTRA DIURNA", "VALOR EXTRA NOCTURNA", "VALOR RECARGO NOCTURNO", 
-                       "VALOR EXTRA", "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR"]
+                       "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL EXTRA"]
     
     for col in columnas_dinero:
         if col in df_display.columns:
