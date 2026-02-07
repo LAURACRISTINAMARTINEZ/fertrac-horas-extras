@@ -408,7 +408,35 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
 
     # Agregar columna de mes y año para análisis temporal
     df["MES"] = df["FECHA"].dt.to_period('M')
-    df["MES_NOMBRE"] = df["FECHA"].dt.strftime('%B %Y')
+    
+    # Crear nombres de mes en ESPAÑOL
+    meses_espanol = {
+        'January': 'Enero',
+        'February': 'Febrero',
+        'March': 'Marzo',
+        'April': 'Abril',
+        'May': 'Mayo',
+        'June': 'Junio',
+        'July': 'Julio',
+        'August': 'Agosto',
+        'September': 'Septiembre',
+        'October': 'Octubre',
+        'November': 'Noviembre',
+        'December': 'Diciembre'
+    }
+    
+    # Primero crear en inglés y luego traducir
+    df["MES_NOMBRE_TEMP"] = df["FECHA"].dt.strftime('%B %Y')
+    
+    # Traducir a español
+    def traducir_mes(mes_nombre):
+        for ingles, espanol in meses_espanol.items():
+            if ingles in mes_nombre:
+                return mes_nombre.replace(ingles, espanol)
+        return mes_nombre
+    
+    df["MES_NOMBRE"] = df["MES_NOMBRE_TEMP"].apply(traducir_mes)
+    df = df.drop("MES_NOMBRE_TEMP", axis=1)
 
     # FILTRO POR ÁREA
     st.subheader("🔍 Filtros de visualización")
@@ -547,7 +575,22 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     }).reset_index()
     
     # Ordenar por fecha
-    comparativo_mensual["ORDEN"] = pd.to_datetime(comparativo_mensual["MES_NOMBRE"], format='%B %Y')
+    # Crear columna temporal con fecha para ordenar
+    def extraer_fecha(mes_nombre):
+        # De "Febrero 2025" extraer año y mes
+        partes = mes_nombre.split()
+        if len(partes) == 2:
+            mes_texto, anio = partes
+            meses = {
+                'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+                'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+                'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+            }
+            mes_num = meses.get(mes_texto, 1)
+            return datetime(int(anio), mes_num, 1)
+        return datetime(2025, 1, 1)
+    
+    comparativo_mensual["ORDEN"] = comparativo_mensual["MES_NOMBRE"].apply(extraer_fecha)
     comparativo_mensual = comparativo_mensual.sort_values("ORDEN")
     
     col_comp1, col_comp2 = st.columns(2)
