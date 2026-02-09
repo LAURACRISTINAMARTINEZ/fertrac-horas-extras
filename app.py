@@ -448,7 +448,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df["VALOR EXTRA"] = df["VALOR EXTRA DIURNA"] + df["VALOR EXTRA NOCTURNA"] + df["VALOR RECARGO NOCTURNO"]
     df["VALOR TOTAL A PAGAR"] = df["VALOR EXTRA"] + df["COMISIÓN O BONIFICACIÓN"]
 
-    # Redondear valores
+    # Redondear valores MONETARIOS (los cálculos ya se hicieron con precisión completa)
     df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
     df["VALOR EXTRA DIURNA"] = df["VALOR EXTRA DIURNA"].round(2)
     df["VALOR EXTRA NOCTURNA"] = df["VALOR EXTRA NOCTURNA"].round(2)
@@ -456,11 +456,14 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df["VALOR EXTRA"] = df["VALOR EXTRA"].round(2)
     df["VALOR TOTAL A PAGAR"] = df["VALOR TOTAL A PAGAR"].round(2)
     df["TOTAL BASE LIQUIDACION"] = df["TOTAL BASE LIQUIDACION"].round(2)
-    df["HORAS TRABAJADAS"] = df["HORAS TRABAJADAS"].round(2)
-    df["HORAS EXTRA DIURNA"] = df["HORAS EXTRA DIURNA"].round(2)
-    df["HORAS EXTRA NOCTURNA"] = df["HORAS EXTRA NOCTURNA"].round(2)
-    df["RECARGO NOCTURNO"] = df["RECARGO NOCTURNO"].round(2)
-    df["TOTAL HORAS EXTRA"] = df["TOTAL HORAS EXTRA"].round(2)
+    
+    # Redondear horas SOLO PARA VISUALIZACIÓN (después de los cálculos monetarios)
+    # Mantener precisión interna pero mostrar 2 decimales
+    df["HORAS TRABAJADAS_DISPLAY"] = df["HORAS TRABAJADAS"].round(2)
+    df["HORAS EXTRA DIURNA_DISPLAY"] = df["HORAS EXTRA DIURNA"].round(2)
+    df["HORAS EXTRA NOCTURNA_DISPLAY"] = df["HORAS EXTRA NOCTURNA"].round(2)
+    df["RECARGO NOCTURNO_DISPLAY"] = df["RECARGO NOCTURNO"].round(2)
+    df["TOTAL HORAS EXTRA_DISPLAY"] = df["TOTAL HORAS EXTRA"].round(2)
 
     # Resumen informativo
     st.info(f"""
@@ -531,11 +534,11 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     columnas_mostrar = [
         "FECHA", "NOMBRE", "CARGO", "CÉDULA", "AREA", 
         "TURNO", "TURNO ENTRADA", "TURNO SALIDA",           # Horarios del turno
-        "HRA INGRESO", "HORA SALIDA", "HORAS TRABAJADAS",
-        "HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",         # Extra diurna
-        "HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",     # Extra nocturna  
-        "RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",       # Recargo nocturno
-        "TOTAL HORAS EXTRA",                                 # Total de extras
+        "HRA INGRESO", "HORA SALIDA", "HORAS TRABAJADAS_DISPLAY",
+        "HORAS EXTRA DIURNA_DISPLAY", "VALOR EXTRA DIURNA",         # Extra diurna
+        "HORAS EXTRA NOCTURNA_DISPLAY", "VALOR EXTRA NOCTURNA",     # Extra nocturna  
+        "RECARGO NOCTURNO_DISPLAY", "VALOR RECARGO NOCTURNO",       # Recargo nocturno
+        "TOTAL HORAS EXTRA_DISPLAY",                                 # Total de extras
         "ACTIVIDAD DESARROLLADA",
         "VALOR EXTRA",                                       # Total solo extras
         "COMISIÓN O BONIFICACIÓN", 
@@ -548,10 +551,14 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Crear copia para formatear la visualización
     df_display = df_filtrado[columnas_disponibles].copy()
     
-    # Renombrar columnas para mayor claridad
+    # Renombrar columnas para mayor claridad (quitar _DISPLAY del nombre)
     renombrar = {
+        "HORAS TRABAJADAS_DISPLAY": "HORAS TRABAJADAS",
+        "HORAS EXTRA DIURNA_DISPLAY": "HORAS EXTRA DIURNA",
+        "HORAS EXTRA NOCTURNA_DISPLAY": "HORAS EXTRA NOCTURNA",
+        "RECARGO NOCTURNO_DISPLAY": "RECARGO NOCTURNO",
+        "TOTAL HORAS EXTRA_DISPLAY": "TOTAL HORAS EXTRA",
         "VALOR EXTRA": "VALOR TOTAL EXTRA"
-        # VALOR TOTAL A PAGAR se queda con su nombre original
     }
     df_display = df_display.rename(columns=renombrar)
     
@@ -573,9 +580,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.subheader("👤 Horas extra por empleado")
         fig1, ax1 = plt.subplots(figsize=(10, 6))
         empleado_stats = df_filtrado.groupby("NOMBRE").agg({
-            "HORAS EXTRA DIURNA": "sum",
-            "HORAS EXTRA NOCTURNA": "sum",
-            "RECARGO NOCTURNO": "sum"
+            "HORAS EXTRA DIURNA_DISPLAY": "sum",
+            "HORAS EXTRA NOCTURNA_DISPLAY": "sum",
+            "RECARGO NOCTURNO_DISPLAY": "sum"
         })
         if not empleado_stats.empty:
             empleado_stats.plot(kind='bar', ax=ax1, color=['#f37021', '#ff6600', '#ff9966'], stacked=True)
@@ -604,9 +611,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.subheader("🏢 Horas extra por área")
         fig2, ax2 = plt.subplots(figsize=(10, 6))
         area_stats = df_filtrado.groupby("AREA").agg({
-            "HORAS EXTRA DIURNA": "sum",
-            "HORAS EXTRA NOCTURNA": "sum",
-            "RECARGO NOCTURNO": "sum"
+            "HORAS EXTRA DIURNA_DISPLAY": "sum",
+            "HORAS EXTRA NOCTURNA_DISPLAY": "sum",
+            "RECARGO NOCTURNO_DISPLAY": "sum"
         })
         if not area_stats.empty:
             area_stats.plot(kind='barh', ax=ax2, color=['#f37021', '#ff6600', '#ff9966'], stacked=True)
@@ -635,9 +642,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     # Agrupar por mes
     comparativo_mensual = df.groupby("MES_NOMBRE").agg({
-        "HORAS EXTRA DIURNA": "sum",
-        "HORAS EXTRA NOCTURNA": "sum",
-        "RECARGO NOCTURNO": "sum",
+        "HORAS EXTRA DIURNA_DISPLAY": "sum",
+        "HORAS EXTRA NOCTURNA_DISPLAY": "sum",
+        "RECARGO NOCTURNO_DISPLAY": "sum",
         "VALOR EXTRA": "sum",
         "VALOR TOTAL A PAGAR": "sum"
     }).reset_index()
@@ -669,11 +676,11 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         x = range(len(comparativo_mensual))
         width = 0.25
         
-        ax3.bar([i - width for i in x], comparativo_mensual["HORAS EXTRA DIURNA"], 
+        ax3.bar([i - width for i in x], comparativo_mensual["HORAS EXTRA DIURNA_DISPLAY"], 
                 width, label='Extra Diurna', color='#f37021')
-        ax3.bar(x, comparativo_mensual["HORAS EXTRA NOCTURNA"], 
+        ax3.bar(x, comparativo_mensual["HORAS EXTRA NOCTURNA_DISPLAY"], 
                 width, label='Extra Nocturna', color='#ff6600')
-        ax3.bar([i + width for i in x], comparativo_mensual["RECARGO NOCTURNO"], 
+        ax3.bar([i + width for i in x], comparativo_mensual["RECARGO NOCTURNO_DISPLAY"], 
                 width, label='Recargo Nocturno', color='#ff9966')
         
         ax3.set_xlabel('Mes')
@@ -730,8 +737,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     # Tabla comparativa mensual
     st.markdown("#### Tabla comparativa mensual")
-    tabla_comparativa = comparativo_mensual[["MES_NOMBRE", "HORAS EXTRA DIURNA", "HORAS EXTRA NOCTURNA",
-                                             "RECARGO NOCTURNO", "VALOR EXTRA", "VALOR TOTAL A PAGAR"]].copy()
+    tabla_comparativa = comparativo_mensual[["MES_NOMBRE", "HORAS EXTRA DIURNA_DISPLAY", "HORAS EXTRA NOCTURNA_DISPLAY",
+                                             "RECARGO NOCTURNO_DISPLAY", "VALOR EXTRA", "VALOR TOTAL A PAGAR"]].copy()
     tabla_comparativa.columns = ["Mes", "H. Extra Diurna", "H. Extra Nocturna", "H. Recargo Nocturno",
                                   "Valor Extras ($)", "Total a Pagar ($)"]
     
@@ -749,13 +756,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     col_stat1, col_stat2, col_stat3, col_stat4, col_stat5, col_stat6 = st.columns(6)
     
     with col_stat1:
-        st.metric("H. Extra Diurnas", f"{df_filtrado['HORAS EXTRA DIURNA'].sum():.2f}")
+        st.metric("H. Extra Diurnas", f"{df_filtrado['HORAS EXTRA DIURNA_DISPLAY'].sum():.2f}")
     
     with col_stat2:
-        st.metric("H. Extra Nocturnas", f"{df_filtrado['HORAS EXTRA NOCTURNA'].sum():.2f}")
+        st.metric("H. Extra Nocturnas", f"{df_filtrado['HORAS EXTRA NOCTURNA_DISPLAY'].sum():.2f}")
     
     with col_stat3:
-        st.metric("H. Recargo Nocturno", f"{df_filtrado['RECARGO NOCTURNO'].sum():.2f}")
+        st.metric("H. Recargo Nocturno", f"{df_filtrado['RECARGO NOCTURNO_DISPLAY'].sum():.2f}")
     
     with col_stat4:
         st.metric("Total Extras ($)", f"${df_filtrado['VALOR EXTRA'].sum():,.2f}")
@@ -868,6 +875,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                     elif isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
                         row_data.append(int(value))
                     elif isinstance(value, (np.float64, np.float32, np.float16)):
+                        # IMPORTANTE: NO redondear aquí, mantener precisión completa
+                        # El formato de celda en Excel se encargará de mostrar 2 decimales
                         row_data.append(float(value))
                     elif isinstance(value, (pd.Period,)):
                         row_data.append(str(value))
