@@ -796,7 +796,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.metric("H. Recargo Nocturno", f"{df_filtrado['RECARGO NOCTURNO_DISPLAY'].sum():.2f}")
     
     with col_stat4:
-        st.metric("Total Extras ($)", f"${df_filtrado['VALOR EXTRA'].sum():,.2f}")
+        st.metric("Total Extras ($)", f"${df_filtrado['VALOR TOTAL EXTRAS'].sum():,.2f}")
     
     with col_stat5:
         st.metric("Total Bonificaciones ($)", f"${df_filtrado['COMISIÓN O BONIFICACIÓN'].sum():,.2f}")
