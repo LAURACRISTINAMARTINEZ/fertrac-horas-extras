@@ -200,8 +200,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                         return None
             return None
         
-        entrada = safe_time_convert(row["ENTRADA"])
-        salida = safe_time_convert(row["SALIDA"])
+        # Buscar las columnas correctas - pueden ser "ENTRADA"/"SALIDA" o "HORA ENTRADA"/"HORA SALIDA"
+        if "HORA ENTRADA" in df_turnos.columns:
+            entrada = safe_time_convert(row["HORA ENTRADA"])
+            salida = safe_time_convert(row["HORA SALIDA"])
+        else:
+            entrada = safe_time_convert(row.get("ENTRADA"))
+            salida = safe_time_convert(row.get("SALIDA"))
         
         if entrada and salida:
             turnos_config[turno_nombre] = {
