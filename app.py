@@ -266,131 +266,145 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
 
     def calcular_horas_extras_y_recargo(row):
         """
-        Calcula horas extras diurnas, nocturnas y recargo nocturno por separado
+        Calcula horas extras diurnas, nocturnas y recargo nocturno de forma precisa.
         
-        LÓGICA:
-        - Horario nocturno: 7 PM (19:00) - 6 AM (06:00)
-        - Horario diurno: 6 AM (06:00) - 7 PM (19:00)
+        DEFINICIONES:
+        - Horario NOCTURNO: 19:00 (7 PM) hasta 06:00 (6 AM)
+        - Horario DIURNO: 06:00 (6 AM) hasta 19:00 (7 PM)
         
-        - Extra Diurna: Horas fuera de jornada en horario diurno
-        - Extra Nocturna: Horas fuera de jornada en horario nocturno  
-        - Recargo Nocturno: Horas DENTRO de jornada en horario nocturno
+        CATEGORÍAS:
+        1. RECARGO NOCTURNO: Horas DENTRO de la jornada normal trabajadas en horario nocturno
+        2. EXTRA DIURNA: Horas FUERA de la jornada normal trabajadas en horario diurno
+        3. EXTRA NOCTURNA: Horas FUERA de la jornada normal trabajadas en horario nocturno
         """
         ingreso_real = row["DT_INGRESO"]
         salida_real = row["DT_SALIDA"]
         
-        # Obtener horarios del turno
+        # Obtener horarios del turno esperado
         hora_entrada_esperada, hora_salida_esperada = obtener_horarios_turno(row)
         
-        # Límites de horario nocturno para cálculos de recargo (7 PM - 6 AM)
-        inicio_noche = datetime.combine(row["FECHA"], time(19, 0))  # 7 PM
-        
+        # Inicializar contadores
         horas_extra_diurna = 0
         horas_extra_nocturna = 0
         recargo_nocturno = 0
         
-        # ==== CALCULAR RECARGO NOCTURNO (horas ordinarias en horario nocturno) ====
-        # Solo se paga si la jornada NORMAL cae en horario nocturno
+        # ========================================================================
+        # PARTE 1: RECARGO NOCTURNO (horas normales en horario nocturno)
+        # ========================================================================
+        # El recargo se aplica a las horas DENTRO de la jornada que caen en horario nocturno
         
-        # Inicio de trabajo normal vs inicio noche
-        inicio_trabajo = max(hora_entrada_esperada, ingreso_real)
-        fin_trabajo = min(hora_salida_esperada, salida_real)
+        # Determinar el rango de jornada normal (lo que realmente trabajó dentro del turno)
+        inicio_jornada_normal = max(ingreso_real, hora_entrada_esperada)
+        fin_jornada_normal = min(salida_real, hora_salida_esperada)
         
-        # Calcular intersección de jornada normal con horario nocturno (7 PM - 6 AM)
-        if inicio_trabajo < fin_trabajo:
-            # Verificar si hay intersección con 7 PM - 11:59 PM del mismo día
-            if fin_trabajo > inicio_noche:
-                inicio_recargo = max(inicio_trabajo, inicio_noche)
-                fin_recargo = fin_trabajo
-                recargo_nocturno += (fin_recargo - inicio_recargo).total_seconds() / 3600
+        if inicio_jornada_normal < fin_jornada_normal:
+            # Hay jornada normal trabajada, calcular cuánto de ella es nocturno
+            tiempo_actual = inicio_jornada_normal
             
-            # Verificar si hay intersección con 12 AM - 6 AM (si la jornada cruza medianoche)
-            medianoche = datetime.combine(row["FECHA"], time(0, 0)) + timedelta(days=1)
-            fin_noche_dia_sig = datetime.combine(row["FECHA"], time(6, 0)) + timedelta(days=1)
-            
-            if fin_trabajo > medianoche and inicio_trabajo < fin_noche_dia_sig:
-                inicio_recargo = max(inicio_trabajo, medianoche)
-                fin_recargo = min(fin_trabajo, fin_noche_dia_sig)
-                if fin_recargo > inicio_recargo:
-                    recargo_nocturno += (fin_recargo - inicio_recargo).total_seconds() / 3600
-        
-        # ==== CALCULAR HORAS EXTRA (fuera de jornada) ====
-        
-        # 1. LLEGÓ ANTES de la hora de entrada
-        if ingreso_real < hora_entrada_esperada:
-            tiempo_antes = (hora_entrada_esperada - ingreso_real).total_seconds() / 3600
-            
-            # ============================================================
-            # CORRECCIÓN: Usar la función es_horario_nocturno() que compara
-            # solo las HORAS, no fechas completas
-            # ============================================================
-            hora_ingreso = ingreso_real.time()
-            hora_entrada = hora_entrada_esperada.time()
-            
-            if es_horario_nocturno(hora_ingreso):
-                # Empezó en horario nocturno
-                # Verificar si todo el tiempo antes es nocturno o hay parte diurna
+            while tiempo_actual < fin_jornada_normal:
+                hora_actual = tiempo_actual.time()
                 
-                if hora_ingreso < time(6, 0):
-                    # Llegó entre 00:00 y 06:00 (madrugada)
-                    if hora_entrada <= time(6, 0):
-                        # Todo fue nocturno (entrada también antes de 6 AM)
-                        horas_extra_nocturna += tiempo_antes
+                if es_horario_nocturno(hora_actual):
+                    # Esta hora está en horario nocturno
+                    if hora_actual >= time(19, 0):
+                        # Entre 19:00 y 23:59:59
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
                     else:
-                        # Parte nocturno (hasta 6 AM), parte diurno (6 AM hasta entrada)
-                        limite_6am = datetime.combine(row["FECHA"], time(6, 0))
-                        nocturno = (limite_6am - ingreso_real).total_seconds() / 3600
-                        diurno = (hora_entrada_esperada - limite_6am).total_seconds() / 3600
-                        horas_extra_nocturna += max(nocturno, 0)
-                        horas_extra_diurna += max(diurno, 0)
+                        # Entre 00:00 y 05:59:59
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(6, 0))
+                    
+                    fin_segmento = min(fin_segmento, fin_jornada_normal)
+                    horas = (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    recargo_nocturno += horas
+                    tiempo_actual = fin_segmento
+                    
+                    # Si llegamos al final del día, avanzar a medianoche
+                    if fin_segmento.time() == time(23, 59, 59) and tiempo_actual < fin_jornada_normal:
+                        tiempo_actual = tiempo_actual + timedelta(seconds=1)
                 else:
-                    # Llegó después de las 19:00 (noche)
-                    # Todo es nocturno hasta medianoche, luego sigue nocturno hasta 6 AM
-                    horas_extra_nocturna += tiempo_antes
-            else:
-                # Empezó en horario diurno (entre 6 AM y 7 PM)
-                # Verificar si cruza hacia horario nocturno (poco probable si llegó antes)
-                horas_extra_diurna += tiempo_antes
+                    # Esta hora es diurna, avanzar hasta el inicio del horario nocturno
+                    fin_segmento = datetime.combine(tiempo_actual.date(), time(19, 0))
+                    fin_segmento = min(fin_segmento, fin_jornada_normal)
+                    tiempo_actual = fin_segmento
+                
+                if tiempo_actual >= fin_jornada_normal:
+                    break
         
-        # 2. SALIÓ DESPUÉS de la hora de salida
-        if salida_real > hora_salida_esperada:
-            # Verificar si esas horas son diurnas o nocturnas
-            # De hora_salida_esperada hasta salida_real
+        # ========================================================================
+        # PARTE 2: HORAS EXTRA ANTES DEL TURNO
+        # ========================================================================
+        if ingreso_real < hora_entrada_esperada:
+            tiempo_actual = ingreso_real
             
-            # Caso simple: verificar cada segmento
+            while tiempo_actual < hora_entrada_esperada:
+                hora_actual = tiempo_actual.time()
+                
+                if es_horario_nocturno(hora_actual):
+                    # Hora extra nocturna
+                    if hora_actual >= time(19, 0):
+                        # Entre 19:00 y 23:59:59
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
+                    else:
+                        # Entre 00:00 y 05:59:59
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(6, 0))
+                    
+                    fin_segmento = min(fin_segmento, hora_entrada_esperada)
+                    horas = (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    horas_extra_nocturna += horas
+                    tiempo_actual = fin_segmento
+                    
+                    # Si llegamos al final del día, avanzar a medianoche
+                    if fin_segmento.time() == time(23, 59, 59) and tiempo_actual < hora_entrada_esperada:
+                        tiempo_actual = tiempo_actual + timedelta(seconds=1)
+                else:
+                    # Hora extra diurna
+                    fin_segmento = datetime.combine(tiempo_actual.date(), time(19, 0))
+                    fin_segmento = min(fin_segmento, hora_entrada_esperada)
+                    horas = (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    horas_extra_diurna += horas
+                    tiempo_actual = fin_segmento
+                
+                if tiempo_actual >= hora_entrada_esperada:
+                    break
+        
+        # ========================================================================
+        # PARTE 3: HORAS EXTRA DESPUÉS DEL TURNO
+        # ========================================================================
+        if salida_real > hora_salida_esperada:
             tiempo_actual = hora_salida_esperada
             
             while tiempo_actual < salida_real:
-                # Determinar si este momento es nocturno o diurno
-                hora_del_dia = tiempo_actual.time()
+                hora_actual = tiempo_actual.time()
                 
-                # Usar la función corregida para verificar si es nocturno
-                if es_horario_nocturno(hora_del_dia):
-                    # Es nocturno
-                    # Encontrar hasta cuándo es nocturno
-                    if hora_del_dia >= time(19, 0):
-                        # Estamos entre 7 PM y medianoche
-                        fin_segmento_noche = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
+                if es_horario_nocturno(hora_actual):
+                    # Hora extra nocturna
+                    if hora_actual >= time(19, 0):
+                        # Entre 19:00 y 23:59:59
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
                     else:
-                        # Estamos entre medianoche y 6 AM
-                        fin_segmento_noche = datetime.combine(tiempo_actual.date(), time(6, 0))
+                        # Entre 00:00 y 05:59:59
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(6, 0))
                     
-                    fin_segmento = min(fin_segmento_noche, salida_real)
-                    horas_extra_nocturna += (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    fin_segmento = min(fin_segmento, salida_real)
+                    horas = (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    horas_extra_nocturna += horas
                     tiempo_actual = fin_segmento
+                    
+                    # Si llegamos al final del día, avanzar a medianoche
+                    if fin_segmento.time() == time(23, 59, 59) and tiempo_actual < salida_real:
+                        tiempo_actual = tiempo_actual + timedelta(seconds=1)
                 else:
-                    # Es diurno (6 AM - 7 PM)
-                    fin_segmento_dia = datetime.combine(tiempo_actual.date(), time(19, 0))
-                    fin_segmento = min(fin_segmento_dia, salida_real)
-                    horas_extra_diurna += (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    # Hora extra diurna
+                    fin_segmento = datetime.combine(tiempo_actual.date(), time(19, 0))
+                    fin_segmento = min(fin_segmento, salida_real)
+                    horas = (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    horas_extra_diurna += horas
                     tiempo_actual = fin_segmento
                 
-                # Evitar loop infinito
                 if tiempo_actual >= salida_real:
                     break
-                if fin_segmento == tiempo_actual:
-                    tiempo_actual = tiempo_actual.replace(second=tiempo_actual.second + 1)
         
+        # Asegurar que no haya valores negativos
         return max(horas_extra_diurna, 0), max(horas_extra_nocturna, 0), max(recargo_nocturno, 0)
 
     def calcular_trabajo_real(row):
