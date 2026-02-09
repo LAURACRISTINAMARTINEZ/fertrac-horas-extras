@@ -484,17 +484,15 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         axis=1
     )
     
-    # Valor total de extras
-    df["VALOR EXTRA"] = df["VALOR EXTRA DIURNA"] + df["VALOR EXTRA NOCTURNA"] + df["VALOR RECARGO NOCTURNO"]
-    df["VALOR TOTAL A PAGAR"] = df["VALOR EXTRA"] + df["COMISIÓN O BONIFICACIÓN"]
+    # Valor total de extras (suma de diurna + nocturna + recargo)
+    df["VALOR TOTAL EXTRAS"] = df["VALOR EXTRA DIURNA"] + df["VALOR EXTRA NOCTURNA"] + df["VALOR RECARGO NOCTURNO"]
 
     # Redondear valores MONETARIOS (los cálculos ya se hicieron con precisión completa)
     df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
     df["VALOR EXTRA DIURNA"] = df["VALOR EXTRA DIURNA"].round(2)
     df["VALOR EXTRA NOCTURNA"] = df["VALOR EXTRA NOCTURNA"].round(2)
     df["VALOR RECARGO NOCTURNO"] = df["VALOR RECARGO NOCTURNO"].round(2)
-    df["VALOR EXTRA"] = df["VALOR EXTRA"].round(2)
-    df["VALOR TOTAL A PAGAR"] = df["VALOR TOTAL A PAGAR"].round(2)
+    df["VALOR TOTAL EXTRAS"] = df["VALOR TOTAL EXTRAS"].round(2)
     df["TOTAL BASE LIQUIDACION"] = df["TOTAL BASE LIQUIDACION"].round(2)
     
     # Redondear horas SOLO PARA VISUALIZACIÓN (después de los cálculos monetarios)
@@ -578,11 +576,10 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         "HORAS EXTRA DIURNA_DISPLAY", "VALOR EXTRA DIURNA",         # Extra diurna
         "HORAS EXTRA NOCTURNA_DISPLAY", "VALOR EXTRA NOCTURNA",     # Extra nocturna  
         "RECARGO NOCTURNO_DISPLAY", "VALOR RECARGO NOCTURNO",       # Recargo nocturno
-        "TOTAL HORAS EXTRA_DISPLAY",                                 # Total de extras
+        "TOTAL HORAS EXTRA_DISPLAY",                                 # Total de horas extras
         "ACTIVIDAD DESARROLLADA",
-        "VALOR EXTRA",                                       # Total solo extras
-        "COMISIÓN O BONIFICACIÓN", 
-        "VALOR TOTAL A PAGAR"                                # Total con bonificación
+        "VALOR TOTAL EXTRAS",                                        # Total valor extras
+        "COMISIÓN O BONIFICACIÓN"
     ]
     
     # Filtrar solo las columnas que existen
@@ -597,14 +594,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         "HORAS EXTRA DIURNA_DISPLAY": "HORAS EXTRA DIURNA",
         "HORAS EXTRA NOCTURNA_DISPLAY": "HORAS EXTRA NOCTURNA",
         "RECARGO NOCTURNO_DISPLAY": "RECARGO NOCTURNO",
-        "TOTAL HORAS EXTRA_DISPLAY": "TOTAL HORAS EXTRA",
-        "VALOR EXTRA": "VALOR TOTAL EXTRA"
+        "TOTAL HORAS EXTRA_DISPLAY": "TOTAL HORAS EXTRA"
     }
     df_display = df_display.rename(columns=renombrar)
     
     # Formatear valores monetarios para mejor visualización
     columnas_dinero = ["VALOR EXTRA DIURNA", "VALOR EXTRA NOCTURNA", "VALOR RECARGO NOCTURNO", 
-                       "VALOR TOTAL EXTRA", "COMISIÓN O BONIFICACIÓN", "VALOR TOTAL A PAGAR"]
+                       "VALOR TOTAL EXTRAS", "COMISIÓN O BONIFICACIÓN"]
     
     for col in columnas_dinero:
         if col in df_display.columns:
@@ -685,8 +681,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         "HORAS EXTRA DIURNA_DISPLAY": "sum",
         "HORAS EXTRA NOCTURNA_DISPLAY": "sum",
         "RECARGO NOCTURNO_DISPLAY": "sum",
-        "VALOR EXTRA": "sum",
-        "VALOR TOTAL A PAGAR": "sum"
+        "VALOR TOTAL EXTRAS": "sum"
     }).reset_index()
     
     # Ordenar por fecha
@@ -746,14 +741,11 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.markdown("#### Costos por mes")
         fig4, ax4 = plt.subplots(figsize=(10, 6))
         
-        # Gráfico de barras agrupadas en lugar de líneas
+        # Gráfico de barras simple
         x = range(len(comparativo_mensual))
-        width = 0.35
         
-        ax4.bar([i - width/2 for i in x], comparativo_mensual["VALOR EXTRA"], 
-                width, label='Valor Extras', color='#f37021')
-        ax4.bar([i + width/2 for i in x], comparativo_mensual["VALOR TOTAL A PAGAR"], 
-                width, label='Total a Pagar', color='#ff9966')
+        ax4.bar(x, comparativo_mensual["VALOR TOTAL EXTRAS"], 
+                color='#f37021', label='Valor Total Extras')
         
         ax4.set_xlabel('Mes')
         ax4.set_ylabel('Valor ($)')
@@ -778,13 +770,12 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Tabla comparativa mensual
     st.markdown("#### Tabla comparativa mensual")
     tabla_comparativa = comparativo_mensual[["MES_NOMBRE", "HORAS EXTRA DIURNA_DISPLAY", "HORAS EXTRA NOCTURNA_DISPLAY",
-                                             "RECARGO NOCTURNO_DISPLAY", "VALOR EXTRA", "VALOR TOTAL A PAGAR"]].copy()
+                                             "RECARGO NOCTURNO_DISPLAY", "VALOR TOTAL EXTRAS"]].copy()
     tabla_comparativa.columns = ["Mes", "H. Extra Diurna", "H. Extra Nocturna", "H. Recargo Nocturno",
-                                  "Valor Extras ($)", "Total a Pagar ($)"]
+                                  "Valor Total Extras ($)"]
     
     # Formatear valores monetarios
-    tabla_comparativa["Valor Extras ($)"] = tabla_comparativa["Valor Extras ($)"].apply(lambda x: f"${x:,.2f}")
-    tabla_comparativa["Total a Pagar ($)"] = tabla_comparativa["Total a Pagar ($)"].apply(lambda x: f"${x:,.2f}")
+    tabla_comparativa["Valor Total Extras ($)"] = tabla_comparativa["Valor Total Extras ($)"].apply(lambda x: f"${x:,.2f}")
     tabla_comparativa["H. Extra Diurna"] = tabla_comparativa["H. Extra Diurna"].apply(lambda x: f"{x:.2f}")
     tabla_comparativa["H. Extra Nocturna"] = tabla_comparativa["H. Extra Nocturna"].apply(lambda x: f"{x:.2f}")
     tabla_comparativa["H. Recargo Nocturno"] = tabla_comparativa["H. Recargo Nocturno"].apply(lambda x: f"{x:.2f}")
@@ -811,7 +802,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.metric("Total Bonificaciones ($)", f"${df_filtrado['COMISIÓN O BONIFICACIÓN'].sum():,.2f}")
     
     with col_stat6:
-        st.metric("Total General ($)", f"${df_filtrado['VALOR TOTAL A PAGAR'].sum():,.2f}")
+        st.metric("Total General ($)", f"${df_filtrado['VALOR TOTAL EXTRAS'].sum():,.2f}")
 
     # Descarga de resultados
     st.subheader("💾 Descargar resultados")
@@ -844,7 +835,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
             "Cant. HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",
             "Cant. RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",
-            "TOTAL HORAS EXTRA", "VALOR TOTAL A PAGAR",
+            "TOTAL HORAS EXTRA", "VALOR TOTAL EXTRAS",
             "MES", "MES_NOMBRE", "Observacion"
         ]
         
@@ -889,7 +880,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "Cant. RECARGO NOCTURNO": "RECARGO NOCTURNO",
             "VALOR RECARGO NOCTURNO": "VALOR RECARGO NOCTURNO",
             "TOTAL HORAS EXTRA": "TOTAL HORAS EXTRA",
-            "VALOR TOTAL A PAGAR": "VALOR TOTAL A PAGAR",
+            "VALOR TOTAL EXTRAS": "VALOR TOTAL EXTRAS",
             "MES": "MES",
             "MES_NOMBRE": "MES_NOMBRE",
             "Observacion": "OBSERVACIONES"  # Nueva columna
@@ -968,8 +959,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             'J': 22,  # TURNO
             'K': 12,  # TURNO ENTRADA
             'L': 12,  # TURNO SALIDA
-            'M': 12,  # DT_INGRESO
-            'N': 12,  # DT_SALIDA
+            'M': 12,  # HRA INGRESO
+            'N': 12,  # HORA SALIDA
             'O': 30,  # ACTIVIDAD
             'P': 12,  # HORAS TRAB
             'Q': 12,  # Cant Extra Diurna
@@ -978,8 +969,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             'T': 15,  # Valor Extra Nocturna
             'U': 12,  # Cant Recargo
             'V': 15,  # Valor Recargo
-            'W': 12,  # Total Horas
-            'X': 18,  # Valor Total
+            'W': 12,  # Total Horas Extra
+            'X': 18,  # Valor Total Extras
             'Y': 10,  # MES
             'Z': 15,  # MES_NOMBRE
             'AA': 30,  # Observacion
