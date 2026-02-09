@@ -830,7 +830,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         headers = [
             "CÉDULA", "NOMBRE", "CARGO", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
             "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "TURNO",
-            "TURNO ENTRADA", "TURNO SALIDA", "hora_real_INGRESO", "hora_real_SALIDA",
+            "TURNO ENTRADA", "TURNO SALIDA", "HORA_REAL_INGRESO", "HORA_REAL_SALIDA",
             "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
             "Cant. HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",
@@ -869,8 +869,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "TURNO": "TURNO",
             "TURNO ENTRADA": "TURNO ENTRADA",
             "TURNO SALIDA": "TURNO SALIDA",
-            "hora_real_INGRESO": "HRA INGRESO",  # Cambiado el nombre del encabezado
-            "hora_real_SALIDA": "HORA SALIDA",    # Cambiado el nombre del encabezado
+            "HORA_REAL_INGRESO": "HRA INGRESO",  # Cambiado el nombre del encabezado
+            "HORA_REAL_SALIDA": "HORA SALIDA",    # Cambiado el nombre del encabezado
             "ACTIVIDAD DESARROLLADA": "ACTIVIDAD DESARROLLADA",
             "HORAS TRABAJADAS": "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA": "HORAS EXTRA DIURNA",
