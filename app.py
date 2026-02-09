@@ -862,8 +862,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "TURNO": "TURNO",
             "TURNO ENTRADA": "TURNO ENTRADA",
             "TURNO SALIDA": "TURNO SALIDA",
-            "HORA REAL INGRESO": "hora_real_INGRESO",  # Cambiado el nombre del encabezado
-            "HORA REAL SALIDA": "hora_real_SALIDA",    # Cambiado el nombre del encabezado
+            "HORA REAL INGRESO": "HRA INGRESO",  # Columna real del DataFrame
+            "HORA REAL SALIDA": "HORA SALIDA",    # Columna real del DataFrame
             "ACTIVIDAD DESARROLLADA": "ACTIVIDAD DESARROLLADA",
             "HORAS TRABAJADAS": "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA": "HORAS EXTRA DIURNA",
