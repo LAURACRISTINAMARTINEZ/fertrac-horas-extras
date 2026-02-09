@@ -67,6 +67,36 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Merge con empleados
     df = df_input.merge(df_empleados, left_on=cedula_input, right_on=cedula_empleados, how="left")
     
+    # Validar que existan las columnas necesarias del archivo de empleados
+    columnas_requeridas = ["NOMBRE", "AREA", "SALARIO BASICO"]
+    columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
+    
+    if columnas_faltantes:
+        st.error(f"⚠️ Error: Faltan columnas en el archivo de empleados: {', '.join(columnas_faltantes)}")
+        st.info(f"""
+        El archivo de empleados debe tener las siguientes columnas:
+        - CEDULA o CÉDULA
+        - NOMBRE
+        - AREA
+        - SALARIO BASICO
+        - CARGO (opcional, pero recomendado)
+        """)
+        st.stop()
+    
+    # Verificar si existe CARGO (opcional pero recomendado)
+    if "CARGO" not in df.columns:
+        st.warning("⚠️ Advertencia: No se encontró columna 'CARGO' en el archivo de empleados. Se dejará vacía.")
+        df["CARGO"] = ""
+    
+    # COMISIÓN O BONIFICACIÓN debe venir del archivo input_datos
+    # Si no existe en input_datos, llenar con 0
+    if "COMISIÓN O BONIFICACIÓN" not in df.columns:
+        if "COMISION O BONIFICACION" not in df.columns:
+            st.warning("⚠️ Advertencia: No se encontró columna 'COMISIÓN O BONIFICACIÓN' en el archivo de datos de entrada. Se asumirá valor $0 para todos.")
+            df["COMISIÓN O BONIFICACIÓN"] = 0
+        else:
+            df["COMISIÓN O BONIFICACIÓN"] = df["COMISION O BONIFICACION"]
+    
     # Agregar columna OBSERVACIONES si no existe en el input
     if "OBSERVACIONES" not in df.columns and "OBSERVACION" not in df.columns:
         df["OBSERVACIONES"] = ""  # Columna vacía por defecto
@@ -74,11 +104,17 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         df["OBSERVACIONES"] = df["OBSERVACION"]  # Renombrar si existe con otro nombre
     
     # Verificar que se hayan encontrado coincidencias
-    empleados_sin_info = df[df["NOMBRE"].isna()]
-    if len(empleados_sin_info) > 0:
-        st.warning(f"⚠️ Advertencia: {len(empleados_sin_info)} registros no tienen información de empleado")
-        st.warning(f"Cédulas sin coincidencia: {empleados_sin_info[cedula_input].unique().tolist()[:5]}")
-        st.info("Verifica que las cédulas en ambos archivos coincidan exactamente")
+    # Primero verificar si existe la columna NOMBRE después del merge
+    if "NOMBRE" in df.columns:
+        empleados_sin_info = df[df["NOMBRE"].isna()]
+        if len(empleados_sin_info) > 0:
+            st.warning(f"⚠️ Advertencia: {len(empleados_sin_info)} registros no tienen información de empleado")
+            st.warning(f"Cédulas sin coincidencia: {empleados_sin_info[cedula_input].unique().tolist()[:5]}")
+            st.info("Verifica que las cédulas en ambos archivos coincidan exactamente")
+    else:
+        st.error("⚠️ Error: No se encontró la columna NOMBRE en el archivo de empleados")
+        st.info("El archivo de empleados debe tener una columna llamada 'NOMBRE' o 'Nombre'")
+        st.stop()
 
     # Procesamiento de fechas y horas
     try:
