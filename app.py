@@ -28,11 +28,16 @@ with col2:
     porcentaje_file = st.file_uploader("📤 Subir factores de horas extras (%)", type=["xlsx"], key="porcentaje")
     turnos_file = st.file_uploader("📤 Subir configuración de turnos", type=["xlsx"], key="turnos")
 
+@st.cache_data
+def cargar_excel(file):
+    """Cachea la lectura de archivos Excel para no re-leer en cada interacción"""
+    return pd.read_excel(file)
+
 if input_file and empleados_file and porcentaje_file and turnos_file:
-    df_input = pd.read_excel(input_file)
-    df_empleados = pd.read_excel(empleados_file)
-    df_porcentaje = pd.read_excel(porcentaje_file)
-    df_turnos = pd.read_excel(turnos_file)
+    df_input = cargar_excel(input_file)
+    df_empleados = cargar_excel(empleados_file)
+    df_porcentaje = cargar_excel(porcentaje_file)
+    df_turnos = cargar_excel(turnos_file)
 
     # Normalizar columnas
     df_input.columns = df_input.columns.str.upper().str.strip()
@@ -402,20 +407,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         # Asegurar que no haya valores negativos
         return max(horas_extra_diurna, 0), max(horas_extra_nocturna, 0), max(recargo_nocturno, 0)
 
-    def calcular_trabajo_real(row):
-        """Calcula horas trabajadas descontando 1 hora de almuerzo"""
-        ingreso = row["DT_INGRESO"]
-        salida = row["DT_SALIDA"]
-        dia = row["DIA_NUM"]
-
-        total = (salida - ingreso).total_seconds() / 3600
-        
-        # Descontar 1 hora de almuerzo en días de lunes a viernes
-        if dia < 5:  # Lunes a viernes
-            return total - 1
-        else:  # Sábados y domingos
-            return total
-
     # Agregar columnas con los horarios del turno para visualización
     def obtener_horarios_turno_para_mostrar(row):
         """Retorna los horarios del turno como strings para mostrar en tabla"""
@@ -435,8 +426,10 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df["TURNO ENTRADA"] = [h[0] for h in horarios_turno]
     df["TURNO SALIDA"] = [h[1] for h in horarios_turno]
     
-    # Aplicar cálculos
-    df["HORAS TRABAJADAS"] = df.apply(calcular_trabajo_real, axis=1)
+    # Aplicar cálculos - VECTORIZADO (sin .apply)
+    total_horas = (df["DT_SALIDA"] - df["DT_INGRESO"]).dt.total_seconds() / 3600
+    # Descontar 1 hora de almuerzo solo de lunes a viernes
+    df["HORAS TRABAJADAS"] = np.where(df["DIA_NUM"] < 5, total_horas - 1, total_horas)
     
     # Calcular horas extras diurnas, nocturnas y recargo nocturno
     resultados = df.apply(calcular_horas_extras_y_recargo, axis=1)
@@ -830,7 +823,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         headers = [
             "CÉDULA", "NOMBRE", "CARGO", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
             "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "TURNO",
-            "TURNO ENTRADA", "TURNO SALIDA", "HORA_REAL_INGRESO", "HORA_REAL_SALIDA",
+            "TURNO ENTRADA", "TURNO SALIDA", "hora_real_INGRESO", "hora_real_SALIDA",
             "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
             "Cant. HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",
@@ -869,8 +862,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "TURNO": "TURNO",
             "TURNO ENTRADA": "TURNO ENTRADA",
             "TURNO SALIDA": "TURNO SALIDA",
-            "HORA_REAL_INGRESO": "HRA INGRESO",  # Cambiado el nombre del encabezado
-            "HORA_REAL_SALIDA": "HORA SALIDA",    # Cambiado el nombre del encabezado
+            "hora_real_INGRESO": "HRA INGRESO",  # Cambiado el nombre del encabezado
+            "hora_real_SALIDA": "HORA SALIDA",    # Cambiado el nombre del encabezado
             "ACTIVIDAD DESARROLLADA": "ACTIVIDAD DESARROLLADA",
             "HORAS TRABAJADAS": "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA": "HORAS EXTRA DIURNA",
@@ -929,21 +922,27 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             
             ws.append(row_data)
         
-        # Aplicar formato a todas las celdas
+        # Aplicar formato a todas las celdas - OPTIMIZADO
+        # Pre-calcular el formato de cada columna UNA sola vez
+        center_alignment = Alignment(horizontal="center", vertical="center")
+        col_formats = {}
+        for col_idx, header_name in enumerate(headers, 1):
+            if "VALOR" in header_name or "SALARIO" in header_name or "TOTAL BASE" in header_name or "Valor Ordinario" in header_name:
+                col_formats[col_idx] = '#,##0.00'
+            elif "Cant." in header_name or "HORAS" in header_name:
+                col_formats[col_idx] = '0.00'
+            else:
+                col_formats[col_idx] = None
+        
         for row_idx in range(2, ws.max_row + 1):
             for col_idx in range(1, len(headers) + 1):
                 cell = ws.cell(row=row_idx, column=col_idx)
                 cell.border = border
-                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.alignment = center_alignment
                 
-                # Aplicar formato numérico según la columna
-                header_name = headers[col_idx - 1]
-                if "VALOR" in header_name or "SALARIO" in header_name or "TOTAL BASE" in header_name or "Valor Ordinario" in header_name:
-                    if isinstance(cell.value, (int, float)):
-                        cell.number_format = '#,##0.00'
-                elif "Cant." in header_name or "HORAS" in header_name:
-                    if isinstance(cell.value, (int, float)):
-                        cell.number_format = '0.00'
+                fmt = col_formats[col_idx]
+                if fmt and isinstance(cell.value, (int, float)):
+                    cell.number_format = fmt
         
         # Ajustar anchos de columnas
         column_widths = {
