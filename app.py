@@ -528,7 +528,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     }
     
     # Primero crear en inglés y luego traducir
-    df["MES_NOMBRE_TEMP"] = df["FECHA"].dt.strftime('%B %Y')
+    df["MES_NOMBRE_TEMP"] = df["FECHA"].dt.strftime('%B')
     
     # Traducir a español
     def traducir_mes(mes_nombre):
@@ -823,7 +823,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         headers = [
             "CÉDULA", "NOMBRE", "CARGO", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
             "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "TURNO",
-            "TURNO ENTRADA", "TURNO SALIDA", "hora_real_INGRESO", "hora_real_SALIDA",
+            "TURNO ENTRADA", "TURNO SALIDA", "HORA REAL INGRESO", "HORA REAL SALIDA",
             "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
             "Cant. HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",
@@ -862,8 +862,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "TURNO": "TURNO",
             "TURNO ENTRADA": "TURNO ENTRADA",
             "TURNO SALIDA": "TURNO SALIDA",
-            "hora_real_INGRESO": "HRA INGRESO",  # Cambiado el nombre del encabezado
-            "hora_real_SALIDA": "HORA SALIDA",    # Cambiado el nombre del encabezado
+            "HORA REAL INGRESO": "hora_real_INGRESO",  # Cambiado el nombre del encabezado
+            "HORA REAL SALIDA": "hora_real_SALIDA",    # Cambiado el nombre del encabezado
             "ACTIVIDAD DESARROLLADA": "ACTIVIDAD DESARROLLADA",
             "HORAS TRABAJADAS": "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA": "HORAS EXTRA DIURNA",
