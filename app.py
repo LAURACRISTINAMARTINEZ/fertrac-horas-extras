@@ -229,7 +229,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     def obtener_horarios_turno(row):
         """Retorna las horas de entrada y salida según la configuración del turno"""
         turno = row.get("TURNO", "TURNO 1").upper().strip()
-        dia = row["DIA_NUM"]
         
         # Si el turno existe en la configuración, usar esos horarios
         if turno in turnos_config:
@@ -240,10 +239,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             st.warning(f"⚠️ Turno '{turno}' no encontrado en configuración. Usando TURNO 1 por defecto.")
             hora_entrada = datetime.combine(row["FECHA"], time(8, 0))
             hora_salida = datetime.combine(row["FECHA"], time(18, 0))
-        
-        # Ajuste para sábados: jornada termina a las 12 PM
-        if dia == 5:
-            hora_salida = datetime.combine(row["FECHA"], time(12, 0))
         
         return hora_entrada, hora_salida
 
@@ -425,7 +420,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     def obtener_horarios_turno_para_mostrar(row):
         """Retorna los horarios del turno como strings para mostrar en tabla"""
         turno = row.get("TURNO", "TURNO 1").upper().strip()
-        dia = row["DIA_NUM"]
         
         if turno in turnos_config:
             hora_entrada = turnos_config[turno]["entrada"]
@@ -433,10 +427,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         else:
             hora_entrada = time(8, 0)
             hora_salida = time(18, 0)
-        
-        # Ajuste para sábados
-        if dia == 5:
-            hora_salida = time(12, 0)
         
         return hora_entrada.strftime('%H:%M'), hora_salida.strftime('%H:%M')
     
