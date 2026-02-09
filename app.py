@@ -529,7 +529,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     # Columnas a mostrar con desglose detallado de los 3 tipos
     columnas_mostrar = [
-        "FECHA", "NOMBRE", "CÉDULA", "AREA", 
+        "FECHA", "NOMBRE", "CARGO", "CÉDULA", "AREA", 
         "TURNO", "TURNO ENTRADA", "TURNO SALIDA",           # Horarios del turno
         "HRA INGRESO", "HORA SALIDA", "HORAS TRABAJADAS",
         "HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",         # Extra diurna
@@ -790,7 +790,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         # Definir encabezados en el orden EXACTO solicitado
         headers = [
-            "CÉDULA", "NOMBRE", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
+            "CÉDULA", "NOMBRE", "CARGO", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
             "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "TURNO",
             "TURNO ENTRADA", "TURNO SALIDA", "DT_INGRESO", "DT_SALIDA",
             "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
@@ -821,6 +821,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         column_mapping = {
             "CÉDULA": "CÉDULA",
             "NOMBRE": "NOMBRE",
+            "CARGO": "CARGO",
             "AREA": "AREA",
             "SALARIO BASICO": "SALARIO BASICO",
             "COMISIÓN O BONIFICACIÓN": "COMISIÓN O BONIFICACIÓN",
@@ -908,30 +909,31 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         column_widths = {
             'A': 12,  # CÉDULA
             'B': 25,  # NOMBRE
-            'C': 15,  # AREA
-            'D': 15,  # SALARIO BASICO
-            'E': 18,  # COMISIÓN
-            'F': 18,  # TOTAL BASE
-            'G': 15,  # Valor Hora
-            'H': 12,  # FECHA
-            'I': 22,  # TURNO
-            'J': 12,  # TURNO ENTRADA
-            'K': 12,  # TURNO SALIDA
-            'L': 12,  # DT_INGRESO
-            'M': 12,  # DT_SALIDA
-            'N': 30,  # ACTIVIDAD
-            'O': 12,  # HORAS TRAB
-            'P': 12,  # Cant Extra Diurna
-            'Q': 15,  # Valor Extra Diurna
-            'R': 12,  # Cant Extra Nocturna
-            'S': 15,  # Valor Extra Nocturna
-            'T': 12,  # Cant Recargo
-            'U': 15,  # Valor Recargo
-            'V': 12,  # Total Horas
-            'W': 18,  # Valor Total
-            'X': 10,  # MES
-            'Y': 15,  # MES_NOMBRE
-            'Z': 30,  # Observacion
+            'C': 20,  # CARGO
+            'D': 15,  # AREA
+            'E': 15,  # SALARIO BASICO
+            'F': 18,  # COMISIÓN
+            'G': 18,  # TOTAL BASE
+            'H': 15,  # Valor Hora
+            'I': 12,  # FECHA
+            'J': 22,  # TURNO
+            'K': 12,  # TURNO ENTRADA
+            'L': 12,  # TURNO SALIDA
+            'M': 12,  # DT_INGRESO
+            'N': 12,  # DT_SALIDA
+            'O': 30,  # ACTIVIDAD
+            'P': 12,  # HORAS TRAB
+            'Q': 12,  # Cant Extra Diurna
+            'R': 15,  # Valor Extra Diurna
+            'S': 12,  # Cant Extra Nocturna
+            'T': 15,  # Valor Extra Nocturna
+            'U': 12,  # Cant Recargo
+            'V': 15,  # Valor Recargo
+            'W': 12,  # Total Horas
+            'X': 18,  # Valor Total
+            'Y': 10,  # MES
+            'Z': 15,  # MES_NOMBRE
+            'AA': 30,  # Observacion
         }
         
         for col, width in column_widths.items():
