@@ -114,7 +114,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                     # Intentar parsear como HH:MM o HH:MM:SS
                     parsed = pd.to_datetime(valor, format='%H:%M', errors='coerce')
                     if pd.isna(parsed):
-                        parsed = pd.to_datetime(valor, format='%H:%M:%S', errors='coerce')
+                        parsed = pd.to_datetime(valor, format='%H:%M:%SS', errors='coerce')
                     if not pd.isna(parsed):
                         return parsed.time()
                 except:
@@ -414,12 +414,19 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         axis=1
     )
 
+    # ============================================================================
+    # CORRECCIÓN PRINCIPAL: Calcular TOTAL BASE LIQUIDACION PRIMERO
+    # ============================================================================
+    # TOTAL BASE LIQUIDACION = SALARIO BASICO + COMISION O BONIFICACION
+    df["TOTAL BASE LIQUIDACION"] = df["SALARIO BASICO"] + df["COMISIÓN O BONIFICACIÓN"]
+    
     # Mapear factores
     factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper(), df_porcentaje["FACTOR"]))
     
     # Calcular valores monetarios
     # IMPORTANTE: Dividir por 220 horas (aplicable desde 2do semestre 2025)
-    df["IMPORTE HORA"] = df["SALARIO BASICO"] / 220
+    # USAR TOTAL BASE LIQUIDACION en lugar de SALARIO BASICO
+    df["IMPORTE HORA"] = df["TOTAL BASE LIQUIDACION"] / 220
     
     # Calcular valor de cada tipo de hora
     df["VALOR EXTRA DIURNA"] = df.apply(
@@ -440,9 +447,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Valor total de extras
     df["VALOR EXTRA"] = df["VALOR EXTRA DIURNA"] + df["VALOR EXTRA NOCTURNA"] + df["VALOR RECARGO NOCTURNO"]
     df["VALOR TOTAL A PAGAR"] = df["VALOR EXTRA"] + df["COMISIÓN O BONIFICACIÓN"]
-    
-    # TOTAL BASE LIQUIDACION = SALARIO BASICO + COMISION O BONIFICACION
-    df["TOTAL BASE LIQUIDACION"] = df["SALARIO BASICO"] + df["COMISIÓN O BONIFICACIÓN"]
 
     # Redondear valores
     df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
@@ -461,6 +465,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Resumen informativo
     st.info(f"""
     ✅ **Configuración aplicada:**
+    - **BASE DE CÁLCULO:** Total Base Liquidación (Salario Básico + Comisión/Bonificación)
     - División por **220 horas** mensuales (vigente desde 2do semestre 2025)
     - Descuento de **1 hora de almuerzo** en días de lunes a viernes
     - **Horario nocturno:** 7:00 PM a 6:00 AM (recargo aplicable a jornada ordinaria en este horario)
