@@ -133,6 +133,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             st.stop()
         
         df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb, 6=Dom
+        
+        # Crear columna DÍA con nombre del día en español
+        dias_espanol = {
+            0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves',
+            4: 'Viernes', 5: 'Sábado', 6: 'Domingo'
+        }
+        df["DÍA"] = df["DIA_NUM"].map(dias_espanol)
     except Exception as e:
         st.error(f"⚠️ Error al procesar fechas: {str(e)}")
         st.info("Verifica que la columna FECHA tenga fechas válidas")
@@ -276,6 +283,10 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         1. RECARGO NOCTURNO: Horas DENTRO de la jornada normal trabajadas en horario nocturno
         2. EXTRA DIURNA: Horas FUERA de la jornada normal trabajadas en horario diurno
         3. EXTRA NOCTURNA: Horas FUERA de la jornada normal trabajadas en horario nocturno
+        
+        CASO ESPECIAL: Cuando el trabajador tiene una franja horaria de madrugada
+        (ej: 00:01 a 03:00), significa que trabajó después de medianoche como continuación
+        del día anterior. En este caso, TODO el rango es hora extra nocturna.
         """
         ingreso_real = row["DT_INGRESO"]
         salida_real = row["DT_SALIDA"]
@@ -287,6 +298,24 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         horas_extra_diurna = 0
         horas_extra_nocturna = 0
         recargo_nocturno = 0
+        
+        # ========================================================================
+        # CASO ESPECIAL: Franja completamente en madrugada (cruce de medianoche)
+        # Si la hora de ingreso Y la hora de salida son ambas antes de la hora
+        # de entrada del turno, y están en horario nocturno, entonces TODO
+        # el rango es hora extra nocturna (el trabajador pasó de un día al otro).
+        # ========================================================================
+        hora_ingreso = ingreso_real.time()
+        hora_salida = salida_real.time()
+        hora_entrada_turno = hora_entrada_esperada.time()
+        
+        # Detectar: ambas horas antes del inicio del turno Y en horario nocturno (madrugada)
+        if (hora_ingreso < hora_entrada_turno and hora_salida <= hora_entrada_turno
+            and hora_salida > hora_ingreso
+            and es_horario_nocturno(hora_ingreso) and es_horario_nocturno(hora_salida)):
+            # Todo es extra nocturna pura
+            horas_extra_nocturna = (salida_real - ingreso_real).total_seconds() / 3600
+            return max(horas_extra_diurna, 0), max(horas_extra_nocturna, 0), max(recargo_nocturno, 0)
         
         # ========================================================================
         # PARTE 1: RECARGO NOCTURNO (horas normales en horario nocturno)
@@ -563,7 +592,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     # Columnas a mostrar con desglose detallado de los 3 tipos
     columnas_mostrar = [
-        "FECHA", "NOMBRE", "CARGO", "CÉDULA", "AREA", 
+        "FECHA", "DÍA", "NOMBRE", "CARGO", "CÉDULA", "AREA", 
         "TURNO", "TURNO ENTRADA", "TURNO SALIDA",           # Horarios del turno
         "HRA INGRESO", "HORA SALIDA", "HORAS TRABAJADAS_DISPLAY",
         "HORAS EXTRA DIURNA_DISPLAY", "VALOR EXTRA DIURNA",         # Extra diurna
@@ -822,7 +851,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         # Definir encabezados en el orden EXACTO solicitado
         headers = [
             "CÉDULA", "NOMBRE", "CARGO", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
-            "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "TURNO",
+            "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "DÍA", "TURNO",
             "TURNO ENTRADA", "TURNO SALIDA", "HORA REAL INGRESO", "HORA REAL SALIDA",
             "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
             "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
@@ -859,6 +888,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "TOTAL BASE LIQUIDACION": "TOTAL BASE LIQUIDACION",  # Calculado arriba
             "Valor Ordinario Hora": "IMPORTE HORA",
             "FECHA": "FECHA",
+            "DÍA": "DÍA",
             "TURNO": "TURNO",
             "TURNO ENTRADA": "TURNO ENTRADA",
             "TURNO SALIDA": "TURNO SALIDA",
@@ -955,24 +985,25 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             'G': 18,  # TOTAL BASE
             'H': 15,  # Valor Hora
             'I': 12,  # FECHA
-            'J': 22,  # TURNO
-            'K': 12,  # TURNO ENTRADA
-            'L': 12,  # TURNO SALIDA
-            'M': 12,  # HRA INGRESO
-            'N': 12,  # HORA SALIDA
-            'O': 30,  # ACTIVIDAD
-            'P': 12,  # HORAS TRAB
-            'Q': 12,  # Cant Extra Diurna
-            'R': 15,  # Valor Extra Diurna
-            'S': 12,  # Cant Extra Nocturna
-            'T': 15,  # Valor Extra Nocturna
-            'U': 12,  # Cant Recargo
-            'V': 15,  # Valor Recargo
-            'W': 12,  # Total Horas Extra
-            'X': 18,  # Valor Total Extras
-            'Y': 10,  # MES
-            'Z': 15,  # MES_NOMBRE
-            'AA': 30,  # Observacion
+            'J': 12,  # DÍA
+            'K': 22,  # TURNO
+            'L': 12,  # TURNO ENTRADA
+            'M': 12,  # TURNO SALIDA
+            'N': 14,  # HORA REAL INGRESO
+            'O': 14,  # HORA REAL SALIDA
+            'P': 30,  # ACTIVIDAD
+            'Q': 12,  # HORAS TRAB
+            'R': 12,  # Cant Extra Diurna
+            'S': 15,  # Valor Extra Diurna
+            'T': 12,  # Cant Extra Nocturna
+            'U': 15,  # Valor Extra Nocturna
+            'V': 12,  # Cant Recargo
+            'W': 15,  # Valor Recargo
+            'X': 12,  # Total Horas Extra
+            'Y': 18,  # Valor Total Extras
+            'Z': 10,  # MES
+            'AA': 15,  # MES_NOMBRE
+            'AB': 30,  # Observacion
         }
         
         for col, width in column_widths.items():
