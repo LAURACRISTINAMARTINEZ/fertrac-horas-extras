@@ -457,8 +457,19 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     # Aplicar cálculos - VECTORIZADO (sin .apply)
     total_horas = (df["DT_SALIDA"] - df["DT_INGRESO"]).dt.total_seconds() / 3600
-    # Descontar 1 hora de almuerzo solo de lunes a viernes
-    df["HORAS TRABAJADAS"] = np.where(df["DIA_NUM"] < 5, total_horas - 1, total_horas)
+    
+    # Detectar franjas de madrugada: ingreso y salida antes de las 06:00 AM
+    # En estos casos NO se descuenta almuerzo
+    hora_ingreso = df["HRA INGRESO"].apply(lambda h: h.hour if h else 0)
+    hora_salida_val = df["HORA SALIDA"].apply(lambda h: h.hour if h else 0)
+    es_franja_madrugada = (hora_ingreso < 6) & (hora_salida_val <= 6)
+    
+    # Descontar 1 hora de almuerzo solo de lunes a viernes Y cuando NO es franja de madrugada
+    df["HORAS TRABAJADAS"] = np.where(
+        (df["DIA_NUM"] < 5) & (~es_franja_madrugada),
+        total_horas - 1,
+        total_horas
+    )
     
     # Calcular horas extras diurnas, nocturnas y recargo nocturno
     resultados = df.apply(calcular_horas_extras_y_recargo, axis=1)
