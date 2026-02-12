@@ -23,26 +23,19 @@ st.set_page_config(
 def enviar_notificacion_email(destinatario, asunto, cuerpo_html, archivo_adjunto=None, nombre_archivo=None):
     """
     Envía un correo de notificación cada vez que se usa la herramienta.
-    Las credenciales SMTP se configuran en la barra lateral o en st.secrets.
+    Las credenciales SMTP están configuradas directamente aquí.
     """
     try:
-        # Obtener credenciales SMTP desde session_state (barra lateral)
-        smtp_server = st.session_state.get("smtp_server", "smtp.gmail.com")
-        smtp_port = int(st.session_state.get("smtp_port", 587))
-        smtp_user = st.session_state.get("smtp_user", "analista_automatizacion@fertrac.com")
-        smtp_password = st.session_state.get("smtp_password", "ssrz ldin nvyx ixry")
-        
-        # También intentar leer desde secrets (para despliegue en producción)
-        try:
-            smtp_server = st.secrets.get("SMTP_SERVER", smtp_server)
-            smtp_port = int(st.secrets.get("SMTP_PORT", smtp_port))
-            smtp_user = st.secrets.get("SMTP_USER", smtp_user)
-            smtp_password = st.secrets.get("SMTP_PASSWORD", smtp_password)
-        except Exception:
-            pass  # Si no hay archivo secrets.toml, se usan los valores del sidebar
+        # =============================================
+        # CREDENCIALES SMTP - MODIFICA AQUÍ TUS DATOS
+        # =============================================
+        smtp_server = "smtp.gmail.com"          # Servidor SMTP
+        smtp_port = 587                          # Puerto SMTP
+        smtp_user = "analista_automatizacion@fertrac.com"                           # Correo que ENVÍA (remitente)
+        smtp_password = "ssrz ldin nvyx ixry"                       # Contraseña o App Password
         
         if not smtp_user or not smtp_password:
-            return False, "Credenciales SMTP no configuradas"
+            return False, "Credenciales SMTP no configuradas en el código"
         
         # Crear el mensaje de correo
         msg = MIMEMultipart("alternative")
@@ -123,49 +116,6 @@ def construir_cuerpo_email(num_registros, num_empleados, areas, fecha_ejecucion,
 # Inicializar estado para evitar reenvíos de correo en la misma sesión
 if "email_enviado" not in st.session_state:
     st.session_state.email_enviado = False
-
-# ============================================================================
-# CONFIGURACIÓN SMTP EN LA BARRA LATERAL
-# ============================================================================
-with st.sidebar:
-    st.markdown("### ⚙️ Configuración de correo")
-    st.caption("Configura las credenciales SMTP para recibir notificaciones por correo.")
-    
-    with st.expander("🔧 Credenciales SMTP", expanded=False):
-        st.session_state["smtp_server"] = st.text_input(
-            "Servidor SMTP", 
-            value=st.session_state.get("smtp_server", "smtp.gmail.com"),
-            help="Ej: smtp.gmail.com, smtp.office365.com"
-        )
-        st.session_state["smtp_port"] = st.text_input(
-            "Puerto SMTP", 
-            value=st.session_state.get("smtp_port", "587"),
-            help="Normalmente 587 para TLS"
-        )
-        st.session_state["smtp_user"] = st.text_input(
-            "Correo remitente", 
-            value=st.session_state.get("smtp_user", ""),
-            help="El correo desde el que se enviarán las notificaciones"
-        )
-        st.session_state["smtp_password"] = st.text_input(
-            "Contraseña / App Password", 
-            type="password",
-            value=st.session_state.get("smtp_password", ""),
-            help="Para Gmail usa una 'App Password' (contraseña de aplicación)"
-        )
-        
-        st.info("""
-        💡 **Para Gmail:** Usa una contraseña de aplicación.
-        Ve a myaccount.google.com → Seguridad → Contraseñas de aplicaciones.
-        
-        **Para Outlook/Office365:** smtp.office365.com, puerto 587.
-        """)
-    
-    envio_habilitado = bool(st.session_state.get("smtp_user")) and bool(st.session_state.get("smtp_password"))
-    if envio_habilitado:
-        st.success("✅ Credenciales SMTP configuradas")
-    else:
-        st.warning("⚠️ Configura las credenciales SMTP para habilitar notificaciones por correo")
 
 st.image("logo_fertrac.png", width=200)
 st.markdown(
@@ -712,34 +662,31 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     data_hash = f"{len(df)}_{df[cedula_input].nunique()}_{df['VALOR TOTAL EXTRAS'].sum():.2f}"
     
     if not st.session_state.get(f"email_enviado_{data_hash}", False):
-        envio_habilitado = bool(st.session_state.get("smtp_user")) and bool(st.session_state.get("smtp_password"))
+        # Preparar los datos resumen para incluir en el correo
+        num_registros = len(df)
+        num_empleados = df[cedula_input].nunique()
+        areas = ", ".join(df["AREA"].dropna().unique().tolist())
+        fecha_ejecucion = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        total_valor_extras = df["VALOR TOTAL EXTRAS"].sum()
         
-        if envio_habilitado:
-            # Preparar los datos resumen para incluir en el correo
-            num_registros = len(df)
-            num_empleados = df[cedula_input].nunique()
-            areas = ", ".join(df["AREA"].dropna().unique().tolist())
-            fecha_ejecucion = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            total_valor_extras = df["VALOR TOTAL EXTRAS"].sum()
-            
-            # Construir el cuerpo HTML del correo
-            cuerpo = construir_cuerpo_email(
-                num_registros, num_empleados, areas, fecha_ejecucion, total_valor_extras
-            )
-            
-            # Intentar enviar el correo a data_science@fertrac.com
-            exito, mensaje = enviar_notificacion_email(
-                destinatario="data_science@fertrac.com",
-                asunto=f"📊 Cálculo de Horas Extras - {fecha_ejecucion} - {num_empleados} empleados",
-                cuerpo_html=cuerpo
-            )
-            
-            # Mostrar resultado al usuario con un toast (notificación pequeña)
-            if exito:
-                st.toast("📧 Notificación enviada a data_science@fertrac.com", icon="✅")
-                st.session_state[f"email_enviado_{data_hash}"] = True
-            else:
-                st.toast(f"⚠️ No se pudo enviar el correo: {mensaje}", icon="⚠️")
+        # Construir el cuerpo HTML del correo
+        cuerpo = construir_cuerpo_email(
+            num_registros, num_empleados, areas, fecha_ejecucion, total_valor_extras
+        )
+        
+        # Intentar enviar el correo a data_science@fertrac.com
+        exito, mensaje = enviar_notificacion_email(
+            destinatario="data_science@fertrac.com",
+            asunto=f"📊 Cálculo de Horas Extras - {fecha_ejecucion} - {num_empleados} empleados",
+            cuerpo_html=cuerpo
+        )
+        
+        # Mostrar resultado al usuario con un toast (notificación pequeña)
+        if exito:
+            st.toast("📧 Notificación enviada a data_science@fertrac.com", icon="✅")
+            st.session_state[f"email_enviado_{data_hash}"] = True
+        else:
+            st.toast(f"⚠️ No se pudo enviar el correo: {mensaje}", icon="⚠️")
 
     # Agregar columna de mes y año para análisis temporal
     df["MES"] = df["FECHA"].dt.to_period('M')
