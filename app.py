@@ -4,12 +4,168 @@ import numpy as np
 from datetime import datetime, date, time, timedelta
 import matplotlib.pyplot as plt
 from io import BytesIO
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import socket  # Para manejar errores de conexión
 
 st.set_page_config(
     page_title="Calculadora Horas Extras Fertrac",
     layout="wide",
     page_icon="🕒"
 )
+
+# ============================================================================
+# CONFIGURACIÓN DE ENVÍO DE CORREO
+# ============================================================================
+def enviar_notificacion_email(destinatario, asunto, cuerpo_html, archivo_adjunto=None, nombre_archivo=None):
+    """
+    Envía un correo de notificación cada vez que se usa la herramienta.
+    Las credenciales SMTP se configuran en la barra lateral o en st.secrets.
+    """
+    try:
+        # Obtener credenciales SMTP desde session_state (barra lateral)
+        smtp_server = st.session_state.get("smtp_server", "smtp.gmail.com")
+        smtp_port = int(st.session_state.get("smtp_port", 587))
+        smtp_user = st.session_state.get("smtp_user", "analista_automatizacion@fertrac.com")
+        smtp_password = st.session_state.get("smtp_password", "ssrz ldin nvyx ixry")
+        
+        # También intentar leer desde secrets (para despliegue en producción)
+        try:
+            smtp_server = st.secrets.get("SMTP_SERVER", smtp_server)
+            smtp_port = int(st.secrets.get("SMTP_PORT", smtp_port))
+            smtp_user = st.secrets.get("SMTP_USER", smtp_user)
+            smtp_password = st.secrets.get("SMTP_PASSWORD", smtp_password)
+        except Exception:
+            pass  # Si no hay archivo secrets.toml, se usan los valores del sidebar
+        
+        if not smtp_user or not smtp_password:
+            return False, "Credenciales SMTP no configuradas"
+        
+        # Crear el mensaje de correo
+        msg = MIMEMultipart("alternative")
+        msg["From"] = smtp_user
+        msg["To"] = destinatario
+        msg["Subject"] = asunto
+        
+        # Agregar el cuerpo del correo en formato HTML
+        msg.attach(MIMEText(cuerpo_html, "html"))
+        
+        # Adjuntar archivo si se proporcionó (opcional)
+        if archivo_adjunto and nombre_archivo:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(archivo_adjunto)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f"attachment; filename={nombre_archivo}")
+            msg.attach(part)
+        
+        # Conectar al servidor SMTP y enviar el correo
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, destinatario, msg.as_string())
+        
+        return True, "Correo enviado exitosamente"
+    
+    except smtplib.SMTPAuthenticationError:
+        return False, "Error de autenticación SMTP. Verifica usuario y contraseña."
+    except socket.timeout:
+        return False, "Tiempo de espera agotado al conectar con el servidor SMTP."
+    except Exception as e:
+        return False, f"Error al enviar correo: {str(e)}"
+
+def construir_cuerpo_email(num_registros, num_empleados, areas, fecha_ejecucion, total_valor_extras):
+    """Construye el cuerpo HTML del correo de notificación con el resumen del cálculo."""
+    return f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f37021; padding: 15px; border-radius: 8px 8px 0 0;">
+                <h2 style="color: white; margin: 0;">🕒 Notificación - Calculadora Horas Extras Fertrac</h2>
+            </div>
+            <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
+                <p>Se ha realizado un nuevo cálculo de horas extras con los siguientes detalles:</p>
+                
+                <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                    <tr style="background-color: #f8f8f8;">
+                        <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Fecha y hora de ejecución</td>
+                        <td style="padding: 10px; border: 1px solid #ddd;">{fecha_ejecucion}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Registros procesados</td>
+                        <td style="padding: 10px; border: 1px solid #ddd;">{num_registros}</td>
+                    </tr>
+                    <tr style="background-color: #f8f8f8;">
+                        <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Empleados únicos</td>
+                        <td style="padding: 10px; border: 1px solid #ddd;">{num_empleados}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Áreas involucradas</td>
+                        <td style="padding: 10px; border: 1px solid #ddd;">{areas}</td>
+                    </tr>
+                    <tr style="background-color: #f8f8f8;">
+                        <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Valor total extras</td>
+                        <td style="padding: 10px; border: 1px solid #ddd; color: #f37021; font-weight: bold;">${total_valor_extras:,.2f}</td>
+                    </tr>
+                </table>
+                
+                <p style="color: #888; font-size: 12px; margin-top: 20px;">
+                    Este es un correo automático generado por la Calculadora de Horas Extras de Fertrac.
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+# Inicializar estado para evitar reenvíos de correo en la misma sesión
+if "email_enviado" not in st.session_state:
+    st.session_state.email_enviado = False
+
+# ============================================================================
+# CONFIGURACIÓN SMTP EN LA BARRA LATERAL
+# ============================================================================
+with st.sidebar:
+    st.markdown("### ⚙️ Configuración de correo")
+    st.caption("Configura las credenciales SMTP para recibir notificaciones por correo.")
+    
+    with st.expander("🔧 Credenciales SMTP", expanded=False):
+        st.session_state["smtp_server"] = st.text_input(
+            "Servidor SMTP", 
+            value=st.session_state.get("smtp_server", "smtp.gmail.com"),
+            help="Ej: smtp.gmail.com, smtp.office365.com"
+        )
+        st.session_state["smtp_port"] = st.text_input(
+            "Puerto SMTP", 
+            value=st.session_state.get("smtp_port", "587"),
+            help="Normalmente 587 para TLS"
+        )
+        st.session_state["smtp_user"] = st.text_input(
+            "Correo remitente", 
+            value=st.session_state.get("smtp_user", ""),
+            help="El correo desde el que se enviarán las notificaciones"
+        )
+        st.session_state["smtp_password"] = st.text_input(
+            "Contraseña / App Password", 
+            type="password",
+            value=st.session_state.get("smtp_password", ""),
+            help="Para Gmail usa una 'App Password' (contraseña de aplicación)"
+        )
+        
+        st.info("""
+        💡 **Para Gmail:** Usa una contraseña de aplicación.
+        Ve a myaccount.google.com → Seguridad → Contraseñas de aplicaciones.
+        
+        **Para Outlook/Office365:** smtp.office365.com, puerto 587.
+        """)
+    
+    envio_habilitado = bool(st.session_state.get("smtp_user")) and bool(st.session_state.get("smtp_password"))
+    if envio_habilitado:
+        st.success("✅ Credenciales SMTP configuradas")
+    else:
+        st.warning("⚠️ Configura las credenciales SMTP para habilitar notificaciones por correo")
 
 st.image("logo_fertrac.png", width=200)
 st.markdown(
@@ -547,6 +703,43 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     - **Horas extra nocturnas:** Fuera de jornada en horario nocturno (7:00 PM - 6:00 AM)
     - **Turnos configurables** según archivo de turnos cargado
     """)
+
+    # ============================================================================
+    # ENVÍO AUTOMÁTICO DE CORREO DE NOTIFICACIÓN
+    # ============================================================================
+    # Se genera una clave única basada en los datos procesados para evitar
+    # que Streamlit reenvíe el correo cada vez que recarga la página
+    data_hash = f"{len(df)}_{df[cedula_input].nunique()}_{df['VALOR TOTAL EXTRAS'].sum():.2f}"
+    
+    if not st.session_state.get(f"email_enviado_{data_hash}", False):
+        envio_habilitado = bool(st.session_state.get("smtp_user")) and bool(st.session_state.get("smtp_password"))
+        
+        if envio_habilitado:
+            # Preparar los datos resumen para incluir en el correo
+            num_registros = len(df)
+            num_empleados = df[cedula_input].nunique()
+            areas = ", ".join(df["AREA"].dropna().unique().tolist())
+            fecha_ejecucion = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            total_valor_extras = df["VALOR TOTAL EXTRAS"].sum()
+            
+            # Construir el cuerpo HTML del correo
+            cuerpo = construir_cuerpo_email(
+                num_registros, num_empleados, areas, fecha_ejecucion, total_valor_extras
+            )
+            
+            # Intentar enviar el correo a data_science@fertrac.com
+            exito, mensaje = enviar_notificacion_email(
+                destinatario="data_science@fertrac.com",
+                asunto=f"📊 Cálculo de Horas Extras - {fecha_ejecucion} - {num_empleados} empleados",
+                cuerpo_html=cuerpo
+            )
+            
+            # Mostrar resultado al usuario con un toast (notificación pequeña)
+            if exito:
+                st.toast("📧 Notificación enviada a data_science@fertrac.com", icon="✅")
+                st.session_state[f"email_enviado_{data_hash}"] = True
+            else:
+                st.toast(f"⚠️ No se pudo enviar el correo: {mensaje}", icon="⚠️")
 
     # Agregar columna de mes y año para análisis temporal
     df["MES"] = df["FECHA"].dt.to_period('M')
