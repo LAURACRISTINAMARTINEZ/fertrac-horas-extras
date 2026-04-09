@@ -9,14 +9,74 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-import socket  # Para manejar errores de conexión
+import socket
+
+# ============================================================================
+# FESTIVOS COLOMBIANOS — cálculo automático por año (sin librerías externas)
+# ============================================================================
+def _pascua(anio):
+    """Algoritmo de Butcher para calcular el Domingo de Pascua."""
+    a = anio % 19
+    b = anio // 100
+    c = anio % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19*a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2*e + 2*i - h - k) % 7
+    m = (a + 11*h + 22*l) // 451
+    mes = (h + l - 7*m + 114) // 31
+    dia = ((h + l - 7*m + 114) % 31) + 1
+    return date(anio, mes, dia)
+
+def _siguiente_lunes(d):
+    """Traslada una fecha al siguiente lunes (Ley Emiliani). Si ya es lunes, no cambia."""
+    dias = (7 - d.weekday()) % 7
+    return d if dias == 0 else d + timedelta(days=dias)
+
+def festivos_colombia(anio):
+    """
+    Retorna un set con todas las fechas festivas colombianas para el año dado.
+    18 festivos legales: 6 fijos + 7 Ley Emiliani + 5 religiosos móviles.
+    """
+    p = _pascua(anio)
+    f = set()
+
+    # Fijos (no se trasladan)
+    f.add(date(anio, 1,  1))   # Año Nuevo
+    f.add(date(anio, 5,  1))   # Día del Trabajo
+    f.add(date(anio, 7, 20))   # Independencia de Colombia
+    f.add(date(anio, 8,  7))   # Batalla de Boyacá
+    f.add(date(anio, 12, 8))   # Inmaculada Concepción
+    f.add(date(anio, 12, 25))  # Navidad
+
+    # Ley Emiliani (se trasladan al siguiente lunes)
+    f.add(_siguiente_lunes(date(anio, 1,  6)))   # Reyes Magos
+    f.add(_siguiente_lunes(date(anio, 3, 19)))   # San José
+    f.add(_siguiente_lunes(date(anio, 6, 29)))   # San Pedro y San Pablo
+    f.add(_siguiente_lunes(date(anio, 8, 15)))   # Asunción de la Virgen
+    f.add(_siguiente_lunes(date(anio, 10, 12)))  # Día de la Raza
+    f.add(_siguiente_lunes(date(anio, 11,  1)))  # Todos los Santos
+    f.add(_siguiente_lunes(date(anio, 11, 11)))  # Independencia de Cartagena
+
+    # Religiosos móviles (calculados desde Pascua)
+    f.add(p - timedelta(days=3))                     # Jueves Santo
+    f.add(p - timedelta(days=2))                     # Viernes Santo
+    f.add(_siguiente_lunes(p + timedelta(days=39)))  # Ascensión del Señor
+    f.add(_siguiente_lunes(p + timedelta(days=60)))  # Corpus Christi
+    f.add(_siguiente_lunes(p + timedelta(days=68)))  # Sagrado Corazón de Jesús
+
+    return f
 
 st.set_page_config(
     page_title="Calculadora Horas Extras Fertrac",
     layout="wide",
     page_icon="🕒"
 )
- 
+
 # ============================================================================
 # CONFIGURACIÓN DE ENVÍO DE CORREO
 # ============================================================================
@@ -152,7 +212,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df_turnos.columns = df_turnos.columns.str.upper().str.strip()
 
     # Normalizar nombres de columnas de cédula
-    # El archivo de input puede tener "CÉDULA" y el de empleados "CEDULA"
     if "CÉDULA" in df_input.columns:
         cedula_input = "CÉDULA"
     elif "CEDULA" in df_input.columns:
@@ -162,13 +221,15 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.info("La columna debe llamarse 'CÉDULA' o 'CEDULA'")
         st.stop()
     
-    if "CEDULA" in df_empleados.columns:
-        cedula_empleados = "CEDULA"
-    elif "CÉDULA" in df_empleados.columns:
-        cedula_empleados = "CÉDULA"
-    else:
+    # Buscar columna cédula en empleados (acepta CEDULA, CÉDULA, o cualquier variante normalizada)
+    cedula_empleados = None
+    for col in df_empleados.columns:
+        if col.upper().strip() in ("CEDULA", "CÉDULA", "CEDULA"):
+            cedula_empleados = col
+            break
+    if cedula_empleados is None:
         st.error("⚠️ Error: No se encontró columna de cédula en base de empleados")
-        st.info("La columna debe llamarse 'CEDULA' o 'CÉDULA'")
+        st.info("La columna debe llamarse 'CEDULA', 'Cedula' o 'CÉDULA'")
         st.stop()
     
     # Convertir cédulas a string para evitar problemas de tipo
@@ -200,7 +261,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         df["CARGO"] = ""
     
     # COMISIÓN O BONIFICACIÓN debe venir del archivo input_datos
-    # Si no existe en input_datos, llenar con 0
     if "COMISIÓN O BONIFICACIÓN" not in df.columns:
         if "COMISION O BONIFICACION" not in df.columns:
             st.warning("⚠️ Advertencia: No se encontró columna 'COMISIÓN O BONIFICACIÓN' en el archivo de datos de entrada. Se asumirá valor $0 para todos.")
@@ -210,12 +270,11 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     # Agregar columna OBSERVACIONES si no existe en el input
     if "OBSERVACIONES" not in df.columns and "OBSERVACION" not in df.columns:
-        df["OBSERVACIONES"] = ""  # Columna vacía por defecto
+        df["OBSERVACIONES"] = ""
     elif "OBSERVACION" in df.columns:
-        df["OBSERVACIONES"] = df["OBSERVACION"]  # Renombrar si existe con otro nombre
+        df["OBSERVACIONES"] = df["OBSERVACION"]
     
     # Verificar que se hayan encontrado coincidencias
-    # Primero verificar si existe la columna NOMBRE después del merge
     if "NOMBRE" in df.columns:
         empleados_sin_info = df[df["NOMBRE"].isna()]
         if len(empleados_sin_info) > 0:
@@ -231,7 +290,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     try:
         df["FECHA"] = pd.to_datetime(df["FECHA"], errors='coerce')
         
-        # Verificar que las fechas se convirtieron correctamente
         if df["FECHA"].isna().any():
             fechas_problema = df[df["FECHA"].isna()].index.tolist()
             st.error(f"⚠️ Error: Algunas fechas no tienen el formato correcto en las filas: {fechas_problema[:5]}")
@@ -240,32 +298,35 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         df["DIA_NUM"] = df["FECHA"].dt.weekday  # 0=Lun, 5=Sáb, 6=Dom
         
-        # Crear columna DÍA con nombre del día en español
         dias_espanol = {
             0: 'Lunes', 1: 'Martes', 2: 'Miércoles', 3: 'Jueves',
             4: 'Viernes', 5: 'Sábado', 6: 'Domingo'
         }
         df["DÍA"] = df["DIA_NUM"].map(dias_espanol)
+
+        # Calcular festivos colombianos para cada año presente en los datos
+        anios_en_datos = df["FECHA"].dt.year.unique()
+        todos_los_festivos = set()
+        for anio in anios_en_datos:
+            todos_los_festivos.update(festivos_colombia(int(anio)))
+
+        # Marcar si cada fecha es festivo
+        df["ES_FESTIVO"] = df["FECHA"].dt.date.apply(lambda d: d in todos_los_festivos)
     except Exception as e:
         st.error(f"⚠️ Error al procesar fechas: {str(e)}")
         st.info("Verifica que la columna FECHA tenga fechas válidas")
         st.stop()
 
     try:
-        # Función para convertir horas de cualquier formato a time
         def convertir_a_time(valor):
             if pd.isna(valor):
                 return None
-            # Si ya es un objeto time, devolverlo
             if isinstance(valor, time):
                 return valor
-            # Si es datetime, extraer solo la hora
             if isinstance(valor, datetime):
                 return valor.time()
-            # Si es string, intentar parsearlo
             if isinstance(valor, str):
                 try:
-                    # Intentar parsear como HH:MM o HH:MM:SS
                     parsed = pd.to_datetime(valor, format='%H:%M', errors='coerce')
                     if pd.isna(parsed):
                         parsed = pd.to_datetime(valor, format='%H:%M:%SS', errors='coerce')
@@ -275,11 +336,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                     pass
             return None
         
-        # Convertir horas usando la función robusta
         df["HRA INGRESO"] = df["HRA INGRESO"].apply(convertir_a_time)
         df["HORA SALIDA"] = df["HORA SALIDA"].apply(convertir_a_time)
         
-        # Verificar que las conversiones fueron exitosas
         if df["HRA INGRESO"].isna().any() or df["HORA SALIDA"].isna().any():
             st.error("⚠️ Error: Algunas horas de entrada o salida no tienen el formato correcto")
             st.info("Las horas pueden estar en formato Excel (tiempo) o texto HH:MM (ej: 08:00, 14:00, 18:30)")
@@ -300,9 +359,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     for _, row in df_turnos.iterrows():
         turno_nombre = str(row["TURNO"]).upper().strip()
         
-        # Convertir horas de manera segura (acepta time, datetime, o string)
         try:
-            # Función para convertir a time
             def a_time(valor):
                 if isinstance(valor, time):
                     return valor
@@ -331,121 +388,107 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             st.error(f"Error procesando turno {turno_nombre}: {e}")
             continue
     
-    # Verificar que se cargaron turnos
     if not turnos_config:
         st.error("⚠️ No se pudo cargar ningún turno del archivo de configuración")
         st.stop()
     
-    # Mostrar configuración de turnos cargada
     st.success(f"""
     ✅ **Configuración de turnos cargada:**
     {chr(10).join([f"- {turno}: {config['entrada'].strftime('%H:%M')} a {config['salida'].strftime('%H:%M')}" 
                    for turno, config in turnos_config.items()])}
     """)
 
-    # Definir horarios según turno (usando configuración)
     def obtener_horarios_turno(row):
         """Retorna las horas de entrada y salida según la configuración del turno"""
         turno = row.get("TURNO", "TURNO 1").upper().strip()
         
-        # Si el turno existe en la configuración, usar esos horarios
         if turno in turnos_config:
             hora_entrada = datetime.combine(row["FECHA"], turnos_config[turno]["entrada"])
             hora_salida = datetime.combine(row["FECHA"], turnos_config[turno]["salida"])
         else:
-            # Si no está configurado, usar valores por defecto de TURNO 1
             st.warning(f"⚠️ Turno '{turno}' no encontrado en configuración. Usando TURNO 1 por defecto.")
             hora_entrada = datetime.combine(row["FECHA"], time(8, 0))
             hora_salida = datetime.combine(row["FECHA"], time(18, 0))
         
         return hora_entrada, hora_salida
 
-    # ============================================================================
-    # FUNCIÓN CORREGIDA - Comparación de horas sin confundir fechas
-    # ============================================================================
     def es_horario_nocturno(hora):
         """
         Determina si una hora (objeto time) está en horario nocturno.
         Horario nocturno: 19:00 (7 PM) a 06:00 (6 AM)
-        
-        CORRECCIÓN: Compara solo las HORAS, no fechas completas.
         """
-        # Extraer solo la hora si es datetime
         if isinstance(hora, datetime):
             hora = hora.time()
-        
-        # Nocturno: >= 19:00 (7 PM en adelante) O < 06:00 (antes de 6 AM)
         return hora >= time(19, 0) or hora < time(6, 0)
 
     def calcular_horas_extras_y_recargo(row):
         """
         Calcula horas extras diurnas, nocturnas y recargo nocturno de forma precisa.
-        
-        DEFINICIONES:
-        - Horario NOCTURNO: 19:00 (7 PM) hasta 06:00 (6 AM)
-        - Horario DIURNO: 06:00 (6 AM) hasta 19:00 (7 PM)
-        
-        CATEGORÍAS:
-        1. RECARGO NOCTURNO: Horas DENTRO de la jornada normal trabajadas en horario nocturno
-        2. EXTRA DIURNA: Horas FUERA de la jornada normal trabajadas en horario diurno
-        3. EXTRA NOCTURNA: Horas FUERA de la jornada normal trabajadas en horario nocturno
-        
-        CASO ESPECIAL: Cuando el trabajador tiene una franja horaria de madrugada
-        (ej: 00:01 a 03:00), significa que trabajó después de medianoche como continuación
-        del día anterior. En este caso, TODO el rango es hora extra nocturna.
         """
         ingreso_real = row["DT_INGRESO"]
         salida_real = row["DT_SALIDA"]
         
-        # Obtener horarios del turno esperado
         hora_entrada_esperada, hora_salida_esperada = obtener_horarios_turno(row)
         
-        # Inicializar contadores
         horas_extra_diurna = 0
         horas_extra_nocturna = 0
         recargo_nocturno = 0
-        
-        # ========================================================================
-        # CASO ESPECIAL: Franja completamente en madrugada (cruce de medianoche)
-        # Si la hora de ingreso Y la hora de salida son ambas antes de la hora
-        # de entrada del turno, y están en horario nocturno, entonces TODO
-        # el rango es hora extra nocturna (el trabajador pasó de un día al otro).
-        # ========================================================================
+
+        # ====================================================================
+        # CASO ESPECIAL: Turno 00:00 - 00:00 = "Todo Extra"
+        # El usuario configura este turno para indicar que el empleado no
+        # tenía jornada ordinaria ese día. Todo lo trabajado son horas extra.
+        # Se clasifica minuto a minuto según horario diurno/nocturno,
+        # arrancando desde la hora REAL de ingreso del empleado.
+        # ====================================================================
+        if hora_entrada_esperada.time() == time(0, 0) and hora_salida_esperada.time() == time(0, 0):
+            tiempo_actual = ingreso_real
+            while tiempo_actual < salida_real:
+                hora_actual = tiempo_actual.time()
+                if es_horario_nocturno(hora_actual):
+                    if hora_actual >= time(19, 0):
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
+                    else:
+                        fin_segmento = datetime.combine(tiempo_actual.date(), time(6, 0))
+                    fin_segmento = min(fin_segmento, salida_real)
+                    horas_extra_nocturna += (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    tiempo_actual = fin_segmento
+                    if fin_segmento.time() == time(23, 59, 59) and tiempo_actual < salida_real:
+                        tiempo_actual += timedelta(seconds=1)
+                else:
+                    fin_segmento = datetime.combine(tiempo_actual.date(), time(19, 0))
+                    fin_segmento = min(fin_segmento, salida_real)
+                    horas_extra_diurna += (fin_segmento - tiempo_actual).total_seconds() / 3600
+                    tiempo_actual = fin_segmento
+                if tiempo_actual >= salida_real:
+                    break
+            return max(horas_extra_diurna, 0), max(horas_extra_nocturna, 0), 0
+
         hora_ingreso = ingreso_real.time()
         hora_salida = salida_real.time()
         hora_entrada_turno = hora_entrada_esperada.time()
+
         
-        # Detectar: ambas horas antes del inicio del turno Y en horario nocturno (madrugada)
         if (hora_ingreso < hora_entrada_turno and hora_salida <= hora_entrada_turno
             and hora_salida > hora_ingreso
             and es_horario_nocturno(hora_ingreso) and es_horario_nocturno(hora_salida)):
-            # Todo es extra nocturna pura
             horas_extra_nocturna = (salida_real - ingreso_real).total_seconds() / 3600
             return max(horas_extra_diurna, 0), max(horas_extra_nocturna, 0), max(recargo_nocturno, 0)
         
-        # ========================================================================
         # PARTE 1: RECARGO NOCTURNO (horas normales en horario nocturno)
-        # ========================================================================
-        # El recargo se aplica a las horas DENTRO de la jornada que caen en horario nocturno
-        
-        # Determinar el rango de jornada normal (lo que realmente trabajó dentro del turno)
         inicio_jornada_normal = max(ingreso_real, hora_entrada_esperada)
         fin_jornada_normal = min(salida_real, hora_salida_esperada)
         
         if inicio_jornada_normal < fin_jornada_normal:
-            # Hay jornada normal trabajada, calcular cuánto de ella es nocturno
             tiempo_actual = inicio_jornada_normal
             
             while tiempo_actual < fin_jornada_normal:
                 hora_actual = tiempo_actual.time()
                 
                 if es_horario_nocturno(hora_actual):
-                    # Esta hora está en horario nocturno
                     if hora_actual >= time(19, 0):
-                        # Entre 19:00 y 23:59:59
                         fin_segmento = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
                     else:
-                        # Entre 00:00 y 05:59:59
                         fin_segmento = datetime.combine(tiempo_actual.date(), time(6, 0))
                     
                     fin_segmento = min(fin_segmento, fin_jornada_normal)
@@ -453,11 +496,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                     recargo_nocturno += horas
                     tiempo_actual = fin_segmento
                     
-                    # Si llegamos al final del día, avanzar a medianoche
                     if fin_segmento.time() == time(23, 59, 59) and tiempo_actual < fin_jornada_normal:
                         tiempo_actual = tiempo_actual + timedelta(seconds=1)
                 else:
-                    # Esta hora es diurna, avanzar hasta el inicio del horario nocturno
                     fin_segmento = datetime.combine(tiempo_actual.date(), time(19, 0))
                     fin_segmento = min(fin_segmento, fin_jornada_normal)
                     tiempo_actual = fin_segmento
@@ -465,9 +506,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 if tiempo_actual >= fin_jornada_normal:
                     break
         
-        # ========================================================================
         # PARTE 2: HORAS EXTRA ANTES DEL TURNO
-        # ========================================================================
         if ingreso_real < hora_entrada_esperada:
             tiempo_actual = ingreso_real
             
@@ -475,12 +514,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 hora_actual = tiempo_actual.time()
                 
                 if es_horario_nocturno(hora_actual):
-                    # Hora extra nocturna
                     if hora_actual >= time(19, 0):
-                        # Entre 19:00 y 23:59:59
                         fin_segmento = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
                     else:
-                        # Entre 00:00 y 05:59:59
                         fin_segmento = datetime.combine(tiempo_actual.date(), time(6, 0))
                     
                     fin_segmento = min(fin_segmento, hora_entrada_esperada)
@@ -488,11 +524,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                     horas_extra_nocturna += horas
                     tiempo_actual = fin_segmento
                     
-                    # Si llegamos al final del día, avanzar a medianoche
                     if fin_segmento.time() == time(23, 59, 59) and tiempo_actual < hora_entrada_esperada:
                         tiempo_actual = tiempo_actual + timedelta(seconds=1)
                 else:
-                    # Hora extra diurna
                     fin_segmento = datetime.combine(tiempo_actual.date(), time(19, 0))
                     fin_segmento = min(fin_segmento, hora_entrada_esperada)
                     horas = (fin_segmento - tiempo_actual).total_seconds() / 3600
@@ -502,9 +536,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 if tiempo_actual >= hora_entrada_esperada:
                     break
         
-        # ========================================================================
         # PARTE 3: HORAS EXTRA DESPUÉS DEL TURNO
-        # ========================================================================
         if salida_real > hora_salida_esperada:
             tiempo_actual = hora_salida_esperada
             
@@ -512,12 +544,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 hora_actual = tiempo_actual.time()
                 
                 if es_horario_nocturno(hora_actual):
-                    # Hora extra nocturna
                     if hora_actual >= time(19, 0):
-                        # Entre 19:00 y 23:59:59
                         fin_segmento = datetime.combine(tiempo_actual.date(), time(23, 59, 59))
                     else:
-                        # Entre 00:00 y 05:59:59
                         fin_segmento = datetime.combine(tiempo_actual.date(), time(6, 0))
                     
                     fin_segmento = min(fin_segmento, salida_real)
@@ -525,11 +554,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                     horas_extra_nocturna += horas
                     tiempo_actual = fin_segmento
                     
-                    # Si llegamos al final del día, avanzar a medianoche
                     if fin_segmento.time() == time(23, 59, 59) and tiempo_actual < salida_real:
                         tiempo_actual = tiempo_actual + timedelta(seconds=1)
                 else:
-                    # Hora extra diurna
                     fin_segmento = datetime.combine(tiempo_actual.date(), time(19, 0))
                     fin_segmento = min(fin_segmento, salida_real)
                     horas = (fin_segmento - tiempo_actual).total_seconds() / 3600
@@ -539,10 +566,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 if tiempo_actual >= salida_real:
                     break
         
-        # Asegurar que no haya valores negativos
         return max(horas_extra_diurna, 0), max(horas_extra_nocturna, 0), max(recargo_nocturno, 0)
 
-    # Agregar columnas con los horarios del turno para visualización
     def obtener_horarios_turno_para_mostrar(row):
         """Retorna los horarios del turno como strings para mostrar en tabla"""
         turno = row.get("TURNO", "TURNO 1").upper().strip()
@@ -556,37 +581,29 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         return hora_entrada.strftime('%H:%M'), hora_salida.strftime('%H:%M')
     
-    # Aplicar para obtener horarios del turno
     horarios_turno = df.apply(obtener_horarios_turno_para_mostrar, axis=1)
     df["TURNO ENTRADA"] = [h[0] for h in horarios_turno]
     df["TURNO SALIDA"] = [h[1] for h in horarios_turno]
     
-    # Aplicar cálculos - VECTORIZADO (sin .apply)
     total_horas = (df["DT_SALIDA"] - df["DT_INGRESO"]).dt.total_seconds() / 3600
     
-    # Detectar franjas de madrugada: ingreso y salida antes de las 06:00 AM
-    # En estos casos NO se descuenta almuerzo
     hora_ingreso = df["HRA INGRESO"].apply(lambda h: h.hour if h else 0)
     hora_salida_val = df["HORA SALIDA"].apply(lambda h: h.hour if h else 0)
     es_franja_madrugada = (hora_ingreso < 6) & (hora_salida_val <= 6)
     
-    # Descontar 1 hora de almuerzo solo de lunes a viernes Y cuando NO es franja de madrugada
     df["HORAS TRABAJADAS"] = np.where(
         (df["DIA_NUM"] < 5) & (~es_franja_madrugada),
         total_horas - 1,
         total_horas
     )
     
-    # Calcular horas extras diurnas, nocturnas y recargo nocturno
     resultados = df.apply(calcular_horas_extras_y_recargo, axis=1)
     df["HORAS EXTRA DIURNA"] = [r[0] for r in resultados]
     df["HORAS EXTRA NOCTURNA"] = [r[1] for r in resultados]
     df["RECARGO NOCTURNO"] = [r[2] for r in resultados]
     
-    # Total de horas extra (diurnas + nocturnas)
     df["TOTAL HORAS EXTRA"] = df["HORAS EXTRA DIURNA"] + df["HORAS EXTRA NOCTURNA"]
 
-    # Asignar tipos de hora extra
     df["TIPO EXTRA"] = df.apply(
         lambda row: "Recargo Nocturno" if row["RECARGO NOCTURNO"] > 0 else 
                     ("Extra Nocturna" if row["HORAS EXTRA NOCTURNA"] > 0 else "Extra Diurna"),
@@ -594,39 +611,95 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     )
 
     # ============================================================================
-    # CORRECCIÓN PRINCIPAL: Calcular TOTAL BASE LIQUIDACION PRIMERO
+    # CALCULAR TOTAL BASE LIQUIDACION
     # ============================================================================
-    # TOTAL BASE LIQUIDACION = SALARIO BASICO + COMISION O BONIFICACION
     df["TOTAL BASE LIQUIDACION"] = df["SALARIO BASICO"] + df["COMISIÓN O BONIFICACIÓN"]
     
-    # Mapear factores
-    factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper(), df_porcentaje["FACTOR"]))
-    
-    # Calcular valores monetarios
-    # IMPORTANTE: Dividir por 220 horas (aplicable desde 2do semestre 2025)
-    # USAR TOTAL BASE LIQUIDACION en lugar de SALARIO BASICO
+    # ============================================================================
+    # MAPEO DE FACTORES - incluye dominicales
+    # ============================================================================
+    factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper().str.strip(), df_porcentaje["FACTOR"]))
+
+    # Mapear los nombres del archivo a las claves internas que usa el código
+    # El archivo usa: "EXTRA DOMINICAL DIURNO" / "EXTRA DOMINICAL NOCTURNO"
+    # El código busca: "EXTRA DIURNA DOMINICAL" / "EXTRA NOCTURNA DOMINICAL"
+    # Se crean alias para compatibilidad en ambos sentidos
+    alias_dominicales = {
+        "EXTRA DIURNA DOMINICAL":    ["EXTRA DOMINICAL DIURNO",   "EXTRA DIURNA DOMINICAL"],
+        "EXTRA NOCTURNA DOMINICAL":  ["EXTRA DOMINICAL NOCTURNO", "EXTRA NOCTURNA DOMINICAL"],
+        "RECARGO NOCTURNO DOMINICAL":["RECARGO DOMINICAL NOCTURNO","RECARGO NOCTURNO DOMINICAL",
+                                      "RECARGO DOMINICAL DIURNO"],
+    }
+    defaults_dominicales = {
+        "EXTRA DIURNA DOMINICAL": 2.00,
+        "EXTRA NOCTURNA DOMINICAL": 2.50,
+        "RECARGO NOCTURNO DOMINICAL": 1.75,
+    }
+    for clave_interna, posibles_nombres in alias_dominicales.items():
+        if clave_interna not in factor_map:
+            for nombre in posibles_nombres:
+                if nombre in factor_map:
+                    factor_map[clave_interna] = factor_map[nombre]
+                    break
+            else:
+                factor_map[clave_interna] = defaults_dominicales[clave_interna]
+                st.info(f"ℹ️ No se encontró factor dominical '{clave_interna}'. Se usará valor por defecto: {defaults_dominicales[clave_interna]}")
+
+    # ============================================================================
+    # FUNCIÓN PARA OBTENER FACTOR SEGÚN TIPO Y DÍA
+    # ============================================================================
+    def obtener_factor_con_dia(tipo_base, dia_num, es_festivo):
+        """
+        Retorna el factor correcto según el tipo de hora extra y el día.
+        Domingo (dia_num == 6) O festivo → aplica tarifa dominical/festiva.
+        En Colombia, los festivos tienen el mismo recargo que los domingos.
+        """
+        if dia_num == 6 or es_festivo:
+            tipo_dominical = tipo_base + " DOMINICAL"
+            return factor_map.get(tipo_dominical, factor_map.get(tipo_base, 1.25))
+        return factor_map.get(tipo_base, 1.25)
+
+    # ============================================================================
+    # CALCULAR VALORES MONETARIOS CON FACTOR CORRECTO POR DÍA
+    # ============================================================================
     df["IMPORTE HORA"] = df["TOTAL BASE LIQUIDACION"] / 220
-    
-    # Calcular valor de cada tipo de hora
+
     df["VALOR EXTRA DIURNA"] = df.apply(
-        lambda row: row["HORAS EXTRA DIURNA"] * row["IMPORTE HORA"] * factor_map.get("EXTRA DIURNA", 1.25),
+        lambda row: row["HORAS EXTRA DIURNA"] * row["IMPORTE HORA"] *
+                    obtener_factor_con_dia("EXTRA DIURNA", row["DIA_NUM"], row["ES_FESTIVO"]),
         axis=1
     )
-    
+
     df["VALOR EXTRA NOCTURNA"] = df.apply(
-        lambda row: row["HORAS EXTRA NOCTURNA"] * row["IMPORTE HORA"] * factor_map.get("EXTRA NOCTURNA", 1.25),
+        lambda row: row["HORAS EXTRA NOCTURNA"] * row["IMPORTE HORA"] *
+                    obtener_factor_con_dia("EXTRA NOCTURNA", row["DIA_NUM"], row["ES_FESTIVO"]),
         axis=1
     )
-    
+
     df["VALOR RECARGO NOCTURNO"] = df.apply(
-        lambda row: row["RECARGO NOCTURNO"] * row["IMPORTE HORA"] * factor_map.get("RECARGO NOCTURNO", 1.35),
+        lambda row: row["RECARGO NOCTURNO"] * row["IMPORTE HORA"] *
+                    obtener_factor_con_dia("RECARGO NOCTURNO", row["DIA_NUM"], row["ES_FESTIVO"]),
         axis=1
     )
-    
-    # Valor total de extras (suma de diurna + nocturna + recargo)
+
     df["VALOR TOTAL EXTRAS"] = df["VALOR EXTRA DIURNA"] + df["VALOR EXTRA NOCTURNA"] + df["VALOR RECARGO NOCTURNO"]
 
-    # Redondear valores MONETARIOS (los cálculos ya se hicieron con precisión completa)
+    # ============================================================================
+    # COLUMNA DE AUDITORÍA: indica qué tarifa se aplicó
+    # ============================================================================
+    def tipo_tarifa(row):
+        if row["DIA_NUM"] == 6 and row["ES_FESTIVO"]:
+            return "DOMINGO FESTIVO"
+        elif row["DIA_NUM"] == 6:
+            return "DOMINGO"
+        elif row["ES_FESTIVO"]:
+            return "FESTIVO"
+        else:
+            return "NORMAL"
+
+    df["TIPO TARIFA"] = df.apply(tipo_tarifa, axis=1)
+
+    # Redondear valores monetarios
     df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
     df["VALOR EXTRA DIURNA"] = df["VALOR EXTRA DIURNA"].round(2)
     df["VALOR EXTRA NOCTURNA"] = df["VALOR EXTRA NOCTURNA"].round(2)
@@ -634,54 +707,55 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df["VALOR TOTAL EXTRAS"] = df["VALOR TOTAL EXTRAS"].round(2)
     df["TOTAL BASE LIQUIDACION"] = df["TOTAL BASE LIQUIDACION"].round(2)
     
-    # Redondear horas SOLO PARA VISUALIZACIÓN (después de los cálculos monetarios)
-    # Mantener precisión interna pero mostrar 2 decimales
+    # Columnas de display (redondeadas para visualización)
     df["HORAS TRABAJADAS_DISPLAY"] = df["HORAS TRABAJADAS"].round(2)
     df["HORAS EXTRA DIURNA_DISPLAY"] = df["HORAS EXTRA DIURNA"].round(2)
     df["HORAS EXTRA NOCTURNA_DISPLAY"] = df["HORAS EXTRA NOCTURNA"].round(2)
     df["RECARGO NOCTURNO_DISPLAY"] = df["RECARGO NOCTURNO"].round(2)
     df["TOTAL HORAS EXTRA_DISPLAY"] = df["TOTAL HORAS EXTRA"].round(2)
 
-    # Resumen informativo
+    num_festivos_en_datos = int(df["ES_FESTIVO"].sum())
+    festivos_encontrados = sorted(df[df["ES_FESTIVO"]]["FECHA"].dt.date.unique())
+    festivos_str = ", ".join(f.strftime("%d/%m/%Y") for f in festivos_encontrados) if festivos_encontrados else "Ninguno en el período"
+
     st.info(f"""
     ✅ **Configuración aplicada:**
     - **BASE DE CÁLCULO:** Total Base Liquidación (Salario Básico + Comisión/Bonificación)
     - División por **220 horas** mensuales (vigente desde 2do semestre 2025)
     - Descuento de **1 hora de almuerzo** en días de lunes a viernes
-    - **Horario nocturno:** 7:00 PM a 6:00 AM (recargo aplicable a jornada ordinaria en este horario)
-    - **Horas extra diurnas:** Fuera de jornada en horario diurno (6:00 AM - 7:00 PM)
-    - **Horas extra nocturnas:** Fuera de jornada en horario nocturno (7:00 PM - 6:00 AM)
+    - **Horario nocturno:** 7:00 PM a 6:00 AM
+    - **Horas extra diurnas (L-S):** Factor {factor_map.get("EXTRA DIURNA", 1.25)}
+    - **Horas extra nocturnas (L-S):** Factor {factor_map.get("EXTRA NOCTURNA", 1.75)}
+    - **Recargo nocturno (L-V):** Factor {factor_map.get("RECARGO NOCTURNO", 1.35)}
+    - **Horas extra diurnas DOMINGO/FESTIVO:** Factor {factor_map.get("EXTRA DIURNA DOMINICAL", 2.00)} ✅
+    - **Horas extra nocturnas DOMINGO/FESTIVO:** Factor {factor_map.get("EXTRA NOCTURNA DOMINICAL", 2.50)} ✅
+    - **Recargo nocturno DOMINGO/FESTIVO:** Factor {factor_map.get("RECARGO NOCTURNO DOMINICAL", 1.75)} ✅
+    - **Festivos detectados en el período ({num_festivos_en_datos} registros):** {festivos_str}
     - **Turnos configurables** según archivo de turnos cargado
     """)
 
     # ============================================================================
     # ENVÍO AUTOMÁTICO DE CORREO DE NOTIFICACIÓN
     # ============================================================================
-    # Se genera una clave única basada en los datos procesados para evitar
-    # que Streamlit reenvíe el correo cada vez que recarga la página
     data_hash = f"{len(df)}_{df[cedula_input].nunique()}_{df['VALOR TOTAL EXTRAS'].sum():.2f}"
     
     if not st.session_state.get(f"email_enviado_{data_hash}", False):
-        # Preparar los datos resumen para incluir en el correo
         num_registros = len(df)
         num_empleados = df[cedula_input].nunique()
         areas = ", ".join(df["AREA"].dropna().unique().tolist())
         fecha_ejecucion = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         total_valor_extras = df["VALOR TOTAL EXTRAS"].sum()
         
-        # Construir el cuerpo HTML del correo
         cuerpo = construir_cuerpo_email(
             num_registros, num_empleados, areas, fecha_ejecucion, total_valor_extras
         )
         
-        # Intentar enviar el correo a data_science@fertrac.com
         exito, mensaje = enviar_notificacion_email(
             destinatario="data_science@fertrac.com",
             asunto=f"📊 Cálculo de Horas Extras - {fecha_ejecucion} - {num_empleados} empleados",
             cuerpo_html=cuerpo
         )
         
-        # Mostrar resultado al usuario con un toast (notificación pequeña)
         if exito:
             st.toast("📧 Notificación enviada a data_science@fertrac.com", icon="✅")
             st.session_state[f"email_enviado_{data_hash}"] = True
@@ -691,26 +765,16 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # Agregar columna de mes y año para análisis temporal
     df["MES"] = df["FECHA"].dt.to_period('M')
     
-    # Crear nombres de mes en ESPAÑOL
     meses_espanol = {
-        'January': 'Enero',
-        'February': 'Febrero',
-        'March': 'Marzo',
-        'April': 'Abril',
-        'May': 'Mayo',
-        'June': 'Junio',
-        'July': 'Julio',
-        'August': 'Agosto',
-        'September': 'Septiembre',
-        'October': 'Octubre',
-        'November': 'Noviembre',
-        'December': 'Diciembre'
+        'January': 'Enero', 'February': 'Febrero', 'March': 'Marzo',
+        'April': 'Abril', 'May': 'Mayo', 'June': 'Junio',
+        'July': 'Julio', 'August': 'Agosto', 'September': 'Septiembre',
+        'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
     }
     
-    # Primero crear en inglés y luego traducir
-    df["MES_NOMBRE_TEMP"] = df["FECHA"].dt.strftime('%B')
+    # Incluir el año en MES_NOMBRE para ordenar correctamente cuando hay datos de múltiples años
+    df["MES_NOMBRE_TEMP"] = df["FECHA"].dt.strftime('%B %Y')
     
-    # Traducir a español
     def traducir_mes(mes_nombre):
         for ingles, espanol in meses_espanol.items():
             if ingles in mes_nombre:
@@ -732,7 +796,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         meses_disponibles = ["Todos los meses"] + sorted(df["MES_NOMBRE"].unique().tolist())
         mes_seleccionado = st.selectbox("Seleccionar mes:", meses_disponibles)
     
-    # Aplicar filtros
     df_filtrado = df.copy()
     if area_seleccionada != "Todas las áreas":
         df_filtrado = df_filtrado[df_filtrado["AREA"] == area_seleccionada]
@@ -741,27 +804,24 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
 
     st.subheader("📊 Resultados del cálculo")
     
-    # Columnas a mostrar con desglose detallado de los 3 tipos
     columnas_mostrar = [
         "FECHA", "DÍA", "NOMBRE", "CARGO", "CÉDULA", "AREA", 
-        "TURNO", "TURNO ENTRADA", "TURNO SALIDA",           # Horarios del turno
+        "TURNO", "TURNO ENTRADA", "TURNO SALIDA",
         "HRA INGRESO", "HORA SALIDA", "HORAS TRABAJADAS_DISPLAY",
-        "HORAS EXTRA DIURNA_DISPLAY", "VALOR EXTRA DIURNA",         # Extra diurna
-        "HORAS EXTRA NOCTURNA_DISPLAY", "VALOR EXTRA NOCTURNA",     # Extra nocturna  
-        "RECARGO NOCTURNO_DISPLAY", "VALOR RECARGO NOCTURNO",       # Recargo nocturno
-        "TOTAL HORAS EXTRA_DISPLAY",                                 # Total de horas extras
+        "TIPO TARIFA",                                               # ← NUEVO: auditoría dominical
+        "HORAS EXTRA DIURNA_DISPLAY", "VALOR EXTRA DIURNA",
+        "HORAS EXTRA NOCTURNA_DISPLAY", "VALOR EXTRA NOCTURNA",
+        "RECARGO NOCTURNO_DISPLAY", "VALOR RECARGO NOCTURNO",
+        "TOTAL HORAS EXTRA_DISPLAY",
         "ACTIVIDAD DESARROLLADA",
-        "VALOR TOTAL EXTRAS",                                        # Total valor extras
+        "VALOR TOTAL EXTRAS",
         "COMISIÓN O BONIFICACIÓN"
     ]
     
-    # Filtrar solo las columnas que existen
     columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
     
-    # Crear copia para formatear la visualización
     df_display = df_filtrado[columnas_disponibles].copy()
     
-    # Renombrar columnas para mayor claridad (quitar _DISPLAY del nombre)
     renombrar = {
         "HORAS TRABAJADAS_DISPLAY": "HORAS TRABAJADAS",
         "HORAS EXTRA DIURNA_DISPLAY": "HORAS EXTRA DIURNA",
@@ -771,7 +831,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     }
     df_display = df_display.rename(columns=renombrar)
     
-    # Formatear valores monetarios para mejor visualización
     columnas_dinero = ["VALOR EXTRA DIURNA", "VALOR EXTRA NOCTURNA", "VALOR RECARGO NOCTURNO", 
                        "VALOR TOTAL EXTRAS", "COMISIÓN O BONIFICACIÓN"]
     
@@ -779,7 +838,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         if col in df_display.columns:
             df_display[col] = df_display[col].apply(lambda x: f"${x:,.2f}" if pd.notna(x) else "$0.00")
     
-    # Mostrar tabla con formato mejorado
     st.dataframe(df_display, use_container_width=True)
 
     # Visualizaciones
@@ -802,7 +860,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             plt.tight_layout()
             st.pyplot(fig1)
             
-            # Botón para descargar gráfico
             buf1 = BytesIO()
             fig1.savefig(buf1, format='png', dpi=300, bbox_inches='tight')
             buf1.seek(0)
@@ -832,7 +889,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             plt.tight_layout()
             st.pyplot(fig2)
             
-            # Botón para descargar gráfico
             buf2 = BytesIO()
             fig2.savefig(buf2, format='png', dpi=300, bbox_inches='tight')
             buf2.seek(0)
@@ -849,7 +905,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # COMPARATIVO MENSUAL
     st.subheader("📅 Comparativo mensual")
     
-    # Agrupar por mes
     comparativo_mensual = df.groupby("MES_NOMBRE").agg({
         "HORAS EXTRA DIURNA_DISPLAY": "sum",
         "HORAS EXTRA NOCTURNA_DISPLAY": "sum",
@@ -857,10 +912,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         "VALOR TOTAL EXTRAS": "sum"
     }).reset_index()
     
-    # Ordenar por fecha
-    # Crear columna temporal con fecha para ordenar
     def extraer_fecha(mes_nombre):
-        # De "Febrero 2025" extraer año y mes
         partes = mes_nombre.split()
         if len(partes) == 2:
             mes_texto, anio = partes
@@ -893,13 +945,12 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         ax3.set_xlabel('Mes')
         ax3.set_ylabel('Horas')
-        ax3.set_xticks(x)
-        ax3.set_xticklabels(comparativo_mensual["MES_NOMBRE"], rotation=45, ha='right')
+        ax3.set_xticks(list(x))
+        ax3.set_xticklabels(comparativo_mensual["MES_NOMBRE"].tolist(), rotation=45, ha='right')
         ax3.legend()
         plt.tight_layout()
         st.pyplot(fig3)
         
-        # Botón para descargar gráfico de horas
         buf3 = BytesIO()
         fig3.savefig(buf3, format='png', dpi=300, bbox_inches='tight')
         buf3.seek(0)
@@ -914,7 +965,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.markdown("#### Costos por mes")
         fig4, ax4 = plt.subplots(figsize=(10, 6))
         
-        # Gráfico de barras simple
         x = range(len(comparativo_mensual))
         
         ax4.bar(x, comparativo_mensual["VALOR TOTAL EXTRAS"], 
@@ -922,14 +972,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         ax4.set_xlabel('Mes')
         ax4.set_ylabel('Valor ($)')
-        ax4.set_xticks(x)
-        ax4.set_xticklabels(comparativo_mensual["MES_NOMBRE"], rotation=45, ha='right')
+        ax4.set_xticks(list(x))
+        ax4.set_xticklabels(comparativo_mensual["MES_NOMBRE"].tolist(), rotation=45, ha='right')
         ax4.legend()
         plt.grid(True, alpha=0.3, axis='y')
         plt.tight_layout()
         st.pyplot(fig4)
         
-        # Botón para descargar gráfico de costos
         buf4 = BytesIO()
         fig4.savefig(buf4, format='png', dpi=300, bbox_inches='tight')
         buf4.seek(0)
@@ -940,14 +989,12 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             mime="image/png"
         )
     
-    # Tabla comparativa mensual
     st.markdown("#### Tabla comparativa mensual")
     tabla_comparativa = comparativo_mensual[["MES_NOMBRE", "HORAS EXTRA DIURNA_DISPLAY", "HORAS EXTRA NOCTURNA_DISPLAY",
                                              "RECARGO NOCTURNO_DISPLAY", "VALOR TOTAL EXTRAS"]].copy()
     tabla_comparativa.columns = ["Mes", "H. Extra Diurna", "H. Extra Nocturna", "H. Recargo Nocturno",
                                   "Valor Total Extras ($)"]
     
-    # Formatear valores monetarios
     tabla_comparativa["Valor Total Extras ($)"] = tabla_comparativa["Valor Total Extras ($)"].apply(lambda x: f"${x:,.2f}")
     tabla_comparativa["H. Extra Diurna"] = tabla_comparativa["H. Extra Diurna"].apply(lambda x: f"{x:.2f}")
     tabla_comparativa["H. Extra Nocturna"] = tabla_comparativa["H. Extra Nocturna"].apply(lambda x: f"{x:.2f}")
@@ -955,7 +1002,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     
     st.dataframe(tabla_comparativa, use_container_width=True, hide_index=True)
 
-    # Resumen estadístico (con datos filtrados)
+    # Resumen estadístico
     st.subheader("📈 Resumen general")
     col_stat1, col_stat2, col_stat3, col_stat4, col_stat5, col_stat6 = st.columns(6)
     
@@ -986,25 +1033,22 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.markdown("### 📥 Descargar datos completos en Excel")
         st.markdown("Incluye todos los cálculos y resultados detallados")
         
-        # Crear el archivo Excel en memoria usando pandas directamente
-        hoy = date.today().isoformat()
-        output_filename = f"resultado_pagos_{hoy}.xlsx"
-        
-        # Preparar DataFrame para exportar con columnas en el orden exacto solicitado
         from openpyxl import Workbook
         from openpyxl.styles import Font, Alignment, Border, Side
         
-        # Crear workbook
+        hoy = date.today().isoformat()
+        output_filename = f"resultado_pagos_{hoy}.xlsx"
+        
         wb = Workbook()
         ws = wb.active
         ws.title = "Resultados"
         
-        # Definir encabezados en el orden EXACTO solicitado
         headers = [
             "CÉDULA", "NOMBRE", "CARGO", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
             "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "DÍA", "TURNO",
             "TURNO ENTRADA", "TURNO SALIDA", "HORA REAL INGRESO", "HORA REAL SALIDA",
             "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
+            "TIPO TARIFA",                                    # ← NUEVO
             "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
             "Cant. HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",
             "Cant. RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",
@@ -1014,7 +1058,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         ws.append(headers)
         
-        # Formatear encabezados - BLANCO Y NEGRO (sin colores)
         header_font = Font(bold=True, size=11)
         border = Border(
             left=Side(style='thin'),
@@ -1028,7 +1071,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             cell.border = border
         
-        # Mapeo de columnas del DataFrame a los encabezados
         column_mapping = {
             "CÉDULA": "CÉDULA",
             "NOMBRE": "NOMBRE",
@@ -1036,17 +1078,18 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "AREA": "AREA",
             "SALARIO BASICO": "SALARIO BASICO",
             "COMISIÓN O BONIFICACIÓN": "COMISIÓN O BONIFICACIÓN",
-            "TOTAL BASE LIQUIDACION": "TOTAL BASE LIQUIDACION",  # Calculado arriba
+            "TOTAL BASE LIQUIDACION": "TOTAL BASE LIQUIDACION",
             "Valor Ordinario Hora": "IMPORTE HORA",
             "FECHA": "FECHA",
             "DÍA": "DÍA",
             "TURNO": "TURNO",
             "TURNO ENTRADA": "TURNO ENTRADA",
             "TURNO SALIDA": "TURNO SALIDA",
-            "HORA REAL INGRESO": "HRA INGRESO",  # Columna real del DataFrame
-            "HORA REAL SALIDA": "HORA SALIDA",    # Columna real del DataFrame
+            "HORA REAL INGRESO": "HRA INGRESO",
+            "HORA REAL SALIDA": "HORA SALIDA",
             "ACTIVIDAD DESARROLLADA": "ACTIVIDAD DESARROLLADA",
             "HORAS TRABAJADAS": "HORAS TRABAJADAS",
+            "TIPO TARIFA": "TIPO TARIFA",                    # ← NUEVO
             "Cant. HORAS EXTRA DIURNA": "HORAS EXTRA DIURNA",
             "VALOR EXTRA DIURNA": "VALOR EXTRA DIURNA",
             "Cant. HORAS EXTRA NOCTURNA": "HORAS EXTRA NOCTURNA",
@@ -1057,10 +1100,9 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "VALOR TOTAL EXTRAS": "VALOR TOTAL EXTRAS",
             "MES": "MES",
             "MES_NOMBRE": "MES_NOMBRE",
-            "Observacion": "OBSERVACIONES"  # Nueva columna
+            "Observacion": "OBSERVACIONES"
         }
         
-        # Escribir datos fila por fila
         for idx, row in df.iterrows():
             row_data = []
             for header in headers:
@@ -1069,7 +1111,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 if df_col in df.columns:
                     value = row[df_col]
                     
-                    # Convertir valores según tipo a tipos básicos de Python
                     if pd.isna(value):
                         row_data.append("")
                     elif isinstance(value, (time, datetime)):
@@ -1080,17 +1121,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                     elif isinstance(value, (np.int64, np.int32, np.int16, np.int8)):
                         row_data.append(int(value))
                     elif isinstance(value, (np.float64, np.float32, np.float16)):
-                        # IMPORTANTE: NO redondear aquí, mantener precisión completa
-                        # El formato de celda en Excel se encargará de mostrar 2 decimales
                         row_data.append(float(value))
                     elif isinstance(value, (pd.Period,)):
                         row_data.append(str(value))
-                    elif hasattr(value, 'item'):  # numpy types
+                    elif hasattr(value, 'item'):
                         row_data.append(value.item())
                     else:
-                        # Convertir a string si es cualquier otro tipo
                         try:
-                            # Intentar convertir a tipo básico
                             if isinstance(value, (int, float, str, bool)):
                                 row_data.append(value)
                             else:
@@ -1098,13 +1135,10 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                         except:
                             row_data.append(str(value))
                 else:
-                    # Columna no existe, poner vacío
                     row_data.append("")
             
             ws.append(row_data)
         
-        # Aplicar formato a todas las celdas - OPTIMIZADO
-        # Pre-calcular el formato de cada columna UNA sola vez
         center_alignment = Alignment(horizontal="center", vertical="center")
         col_formats = {}
         for col_idx, header_name in enumerate(headers, 1):
@@ -1125,7 +1159,6 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
                 if fmt and isinstance(cell.value, (int, float)):
                     cell.number_format = fmt
         
-        # Ajustar anchos de columnas
         column_widths = {
             'A': 12,  # CÉDULA
             'B': 25,  # NOMBRE
@@ -1144,23 +1177,23 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             'O': 14,  # HORA REAL SALIDA
             'P': 30,  # ACTIVIDAD
             'Q': 12,  # HORAS TRAB
-            'R': 12,  # Cant Extra Diurna
-            'S': 15,  # Valor Extra Diurna
-            'T': 12,  # Cant Extra Nocturna
-            'U': 15,  # Valor Extra Nocturna
-            'V': 12,  # Cant Recargo
-            'W': 15,  # Valor Recargo
-            'X': 12,  # Total Horas Extra
-            'Y': 18,  # Valor Total Extras
-            'Z': 10,  # MES
-            'AA': 15,  # MES_NOMBRE
-            'AB': 30,  # Observacion
+            'R': 14,  # TIPO TARIFA  ← NUEVO
+            'S': 12,  # Cant Extra Diurna
+            'T': 15,  # Valor Extra Diurna
+            'U': 12,  # Cant Extra Nocturna
+            'V': 15,  # Valor Extra Nocturna
+            'W': 12,  # Cant Recargo
+            'X': 15,  # Valor Recargo
+            'Y': 12,  # Total Horas Extra
+            'Z': 18,  # Valor Total Extras
+            'AA': 10, # MES
+            'AB': 15, # MES_NOMBRE
+            'AC': 30, # Observacion
         }
         
         for col, width in column_widths.items():
             ws.column_dimensions[col].width = width
         
-        # Guardar en buffer
         excel_buffer = BytesIO()
         wb.save(excel_buffer)
         excel_buffer.seek(0)
