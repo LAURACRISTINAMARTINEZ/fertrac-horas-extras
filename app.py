@@ -161,13 +161,15 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         st.info("La columna debe llamarse 'CÉDULA' o 'CEDULA'")
         st.stop()
     
-    if "CEDULA" in df_empleados.columns:
-        cedula_empleados = "CEDULA"
-    elif "CÉDULA" in df_empleados.columns:
-        cedula_empleados = "CÉDULA"
-    else:
+    # Buscar columna cédula en empleados (acepta CEDULA, CÉDULA, o cualquier variante normalizada)
+    cedula_empleados = None
+    for col in df_empleados.columns:
+        if col.upper().strip() in ("CEDULA", "CÉDULA", "CEDULA"):
+            cedula_empleados = col
+            break
+    if cedula_empleados is None:
         st.error("⚠️ Error: No se encontró columna de cédula en base de empleados")
-        st.info("La columna debe llamarse 'CEDULA' o 'CÉDULA'")
+        st.info("La columna debe llamarse 'CEDULA', 'Cedula' o 'CÉDULA'")
         st.stop()
     
     # Convertir cédulas a string para evitar problemas de tipo
@@ -516,18 +518,32 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     # ============================================================================
     # MAPEO DE FACTORES - incluye dominicales
     # ============================================================================
-    factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper(), df_porcentaje["FACTOR"]))
+    factor_map = dict(zip(df_porcentaje["TIPO HORA EXTRA"].str.upper().str.strip(), df_porcentaje["FACTOR"]))
 
-    # Verificar si existen factores dominicales en el archivo; si no, usar valores legales colombianos
-    if "EXTRA DIURNA DOMINICAL" not in factor_map:
-        factor_map["EXTRA DIURNA DOMINICAL"] = 2.00
-        st.info("ℹ️ No se encontró factor 'EXTRA DIURNA DOMINICAL' en el archivo de porcentajes. Se usará el valor legal: 2.00")
-    if "EXTRA NOCTURNA DOMINICAL" not in factor_map:
-        factor_map["EXTRA NOCTURNA DOMINICAL"] = 2.50
-        st.info("ℹ️ No se encontró factor 'EXTRA NOCTURNA DOMINICAL' en el archivo de porcentajes. Se usará el valor legal: 2.50")
-    if "RECARGO NOCTURNO DOMINICAL" not in factor_map:
-        factor_map["RECARGO NOCTURNO DOMINICAL"] = 1.75
-        st.info("ℹ️ No se encontró factor 'RECARGO NOCTURNO DOMINICAL' en el archivo de porcentajes. Se usará el valor legal: 1.75")
+    # Mapear los nombres del archivo a las claves internas que usa el código
+    # El archivo usa: "EXTRA DOMINICAL DIURNO" / "EXTRA DOMINICAL NOCTURNO"
+    # El código busca: "EXTRA DIURNA DOMINICAL" / "EXTRA NOCTURNA DOMINICAL"
+    # Se crean alias para compatibilidad en ambos sentidos
+    alias_dominicales = {
+        "EXTRA DIURNA DOMINICAL":    ["EXTRA DOMINICAL DIURNO",   "EXTRA DIURNA DOMINICAL"],
+        "EXTRA NOCTURNA DOMINICAL":  ["EXTRA DOMINICAL NOCTURNO", "EXTRA NOCTURNA DOMINICAL"],
+        "RECARGO NOCTURNO DOMINICAL":["RECARGO DOMINICAL NOCTURNO","RECARGO NOCTURNO DOMINICAL",
+                                      "RECARGO DOMINICAL DIURNO"],
+    }
+    defaults_dominicales = {
+        "EXTRA DIURNA DOMINICAL": 2.00,
+        "EXTRA NOCTURNA DOMINICAL": 2.50,
+        "RECARGO NOCTURNO DOMINICAL": 1.75,
+    }
+    for clave_interna, posibles_nombres in alias_dominicales.items():
+        if clave_interna not in factor_map:
+            for nombre in posibles_nombres:
+                if nombre in factor_map:
+                    factor_map[clave_interna] = factor_map[nombre]
+                    break
+            else:
+                factor_map[clave_interna] = defaults_dominicales[clave_interna]
+                st.info(f"ℹ️ No se encontró factor dominical '{clave_interna}'. Se usará valor por defecto: {defaults_dominicales[clave_interna]}")
 
     # ============================================================================
     # FUNCIÓN PARA OBTENER FACTOR SEGÚN TIPO Y DÍA
@@ -642,7 +658,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         'October': 'Octubre', 'November': 'Noviembre', 'December': 'Diciembre'
     }
     
-    df["MES_NOMBRE_TEMP"] = df["FECHA"].dt.strftime('%B')
+    # Incluir el año en MES_NOMBRE para ordenar correctamente cuando hay datos de múltiples años
+    df["MES_NOMBRE_TEMP"] = df["FECHA"].dt.strftime('%B %Y')
     
     def traducir_mes(mes_nombre):
         for ingles, espanol in meses_espanol.items():
@@ -814,8 +831,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         ax3.set_xlabel('Mes')
         ax3.set_ylabel('Horas')
-        ax3.set_xticks(x)
-        ax3.set_xticklabels(comparativo_mensual["MES_NOMBRE"], rotation=45, ha='right')
+        ax3.set_xticks(list(x))
+        ax3.set_xticklabels(comparativo_mensual["MES_NOMBRE"].tolist(), rotation=45, ha='right')
         ax3.legend()
         plt.tight_layout()
         st.pyplot(fig3)
@@ -841,8 +858,8 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         ax4.set_xlabel('Mes')
         ax4.set_ylabel('Valor ($)')
-        ax4.set_xticks(x)
-        ax4.set_xticklabels(comparativo_mensual["MES_NOMBRE"], rotation=45, ha='right')
+        ax4.set_xticks(list(x))
+        ax4.set_xticklabels(comparativo_mensual["MES_NOMBRE"].tolist(), rotation=45, ha='right')
         ax4.legend()
         plt.grid(True, alpha=0.3, axis='y')
         plt.tight_layout()
