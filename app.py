@@ -91,8 +91,8 @@ def enviar_notificacion_email(destinatario, asunto, cuerpo_html, archivo_adjunto
         # =============================================
         smtp_server = "smtp.gmail.com"          # Servidor SMTP
         smtp_port = 587                          # Puerto SMTP
-        smtp_user = "analista_automatizacion@fertrac.com"                           # Correo que ENVÍA (remitente)
-        smtp_password = "ssrz ldin nvyx ixry"                       # Contraseña o App Password
+        smtp_user = st.secrets.get("SMTP_USER", "")        # Correo que ENVÍA (remitente)
+        smtp_password = st.secrets.get("SMTP_PASSWORD", "") # Contraseña o App Password
         
         if not smtp_user or not smtp_password:
             return False, "Credenciales SMTP no configuradas en el código"
