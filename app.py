@@ -757,10 +757,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         )
         
         if exito:
-            st.toast("📧 Notificación enviada a data_science@fertrac.com", icon="✅")
             st.session_state[f"email_enviado_{data_hash}"] = True
-        else:
-            st.toast(f"⚠️ No se pudo enviar el correo: {mensaje}", icon="⚠️")
 
     # Agregar columna de mes y año para análisis temporal
     df["MES"] = df["FECHA"].dt.to_period('M')
