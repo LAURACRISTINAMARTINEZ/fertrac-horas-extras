@@ -699,6 +699,29 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
 
     df["TIPO TARIFA"] = df.apply(tipo_tarifa, axis=1)
 
+    # ============================================================================
+    # COLUMNAS SEPARADAS PARA DÍAS NORMALES VS DOMINGO/FESTIVO
+    # Las horas son las mismas, solo se separan según el tipo de día.
+    # La lógica de cálculo no cambia.
+    # ============================================================================
+    es_dom_fest = (df["DIA_NUM"] == 6) | df["ES_FESTIVO"]
+
+    # Horas y valores días normales (L-S no festivo)
+    df["HORAS EXTRA DIURNA NORMAL"]      = df["HORAS EXTRA DIURNA"].where(~es_dom_fest, 0)
+    df["VALOR EXTRA DIURNA NORMAL"]      = df["VALOR EXTRA DIURNA"].where(~es_dom_fest, 0)
+    df["HORAS EXTRA NOCTURNA NORMAL"]    = df["HORAS EXTRA NOCTURNA"].where(~es_dom_fest, 0)
+    df["VALOR EXTRA NOCTURNA NORMAL"]    = df["VALOR EXTRA NOCTURNA"].where(~es_dom_fest, 0)
+    df["RECARGO NOCTURNO NORMAL"]        = df["RECARGO NOCTURNO"].where(~es_dom_fest, 0)
+    df["VALOR RECARGO NOCTURNO NORMAL"]  = df["VALOR RECARGO NOCTURNO"].where(~es_dom_fest, 0)
+
+    # Horas y valores domingo/festivo
+    df["HORAS EXTRA DIURNA DOM/FEST"]    = df["HORAS EXTRA DIURNA"].where(es_dom_fest, 0)
+    df["VALOR EXTRA DIURNA DOM/FEST"]    = df["VALOR EXTRA DIURNA"].where(es_dom_fest, 0)
+    df["HORAS EXTRA NOCTURNA DOM/FEST"]  = df["HORAS EXTRA NOCTURNA"].where(es_dom_fest, 0)
+    df["VALOR EXTRA NOCTURNA DOM/FEST"]  = df["VALOR EXTRA NOCTURNA"].where(es_dom_fest, 0)
+    df["RECARGO NOCTURNO DOM/FEST"]      = df["RECARGO NOCTURNO"].where(es_dom_fest, 0)
+    df["VALOR RECARGO NOCTURNO DOM/FEST"]= df["VALOR RECARGO NOCTURNO"].where(es_dom_fest, 0)
+
     # Redondear valores monetarios
     df["IMPORTE HORA"] = df["IMPORTE HORA"].round(2)
     df["VALOR EXTRA DIURNA"] = df["VALOR EXTRA DIURNA"].round(2)
@@ -713,6 +736,14 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df["HORAS EXTRA NOCTURNA_DISPLAY"] = df["HORAS EXTRA NOCTURNA"].round(2)
     df["RECARGO NOCTURNO_DISPLAY"] = df["RECARGO NOCTURNO"].round(2)
     df["TOTAL HORAS EXTRA_DISPLAY"] = df["TOTAL HORAS EXTRA"].round(2)
+
+    # Display columns para DOM/FEST
+    df["HORAS EXTRA DIURNA NORMAL_DISPLAY"]     = df["HORAS EXTRA DIURNA NORMAL"].round(2)
+    df["HORAS EXTRA NOCTURNA NORMAL_DISPLAY"]   = df["HORAS EXTRA NOCTURNA NORMAL"].round(2)
+    df["RECARGO NOCTURNO NORMAL_DISPLAY"]       = df["RECARGO NOCTURNO NORMAL"].round(2)
+    df["HORAS EXTRA DIURNA DOM/FEST_DISPLAY"]   = df["HORAS EXTRA DIURNA DOM/FEST"].round(2)
+    df["HORAS EXTRA NOCTURNA DOM/FEST_DISPLAY"] = df["HORAS EXTRA NOCTURNA DOM/FEST"].round(2)
+    df["RECARGO NOCTURNO DOM/FEST_DISPLAY"]     = df["RECARGO NOCTURNO DOM/FEST"].round(2)
 
     num_festivos_en_datos = int(df["ES_FESTIVO"].sum())
     festivos_encontrados = sorted(df[df["ES_FESTIVO"]]["FECHA"].dt.date.unique())
@@ -805,10 +836,13 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         "FECHA", "DÍA", "NOMBRE", "CARGO", "CÉDULA", "AREA", 
         "TURNO", "TURNO ENTRADA", "TURNO SALIDA",
         "HRA INGRESO", "HORA SALIDA", "HORAS TRABAJADAS_DISPLAY",
-        "TIPO TARIFA",                                               # ← NUEVO: auditoría dominical
-        "HORAS EXTRA DIURNA_DISPLAY", "VALOR EXTRA DIURNA",
-        "HORAS EXTRA NOCTURNA_DISPLAY", "VALOR EXTRA NOCTURNA",
-        "RECARGO NOCTURNO_DISPLAY", "VALOR RECARGO NOCTURNO",
+        "TIPO TARIFA",
+        "HORAS EXTRA DIURNA NORMAL_DISPLAY",     "VALOR EXTRA DIURNA NORMAL",
+        "HORAS EXTRA DIURNA DOM/FEST_DISPLAY",   "VALOR EXTRA DIURNA DOM/FEST",
+        "HORAS EXTRA NOCTURNA NORMAL_DISPLAY",   "VALOR EXTRA NOCTURNA NORMAL",
+        "HORAS EXTRA NOCTURNA DOM/FEST_DISPLAY", "VALOR EXTRA NOCTURNA DOM/FEST",
+        "RECARGO NOCTURNO NORMAL_DISPLAY",       "VALOR RECARGO NOCTURNO NORMAL",
+        "RECARGO NOCTURNO DOM/FEST_DISPLAY",     "VALOR RECARGO NOCTURNO DOM/FEST",
         "TOTAL HORAS EXTRA_DISPLAY",
         "ACTIVIDAD DESARROLLADA",
         "VALOR TOTAL EXTRAS",
@@ -820,16 +854,23 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
     df_display = df_filtrado[columnas_disponibles].copy()
     
     renombrar = {
-        "HORAS TRABAJADAS_DISPLAY": "HORAS TRABAJADAS",
-        "HORAS EXTRA DIURNA_DISPLAY": "HORAS EXTRA DIURNA",
-        "HORAS EXTRA NOCTURNA_DISPLAY": "HORAS EXTRA NOCTURNA",
-        "RECARGO NOCTURNO_DISPLAY": "RECARGO NOCTURNO",
-        "TOTAL HORAS EXTRA_DISPLAY": "TOTAL HORAS EXTRA"
+        "HORAS TRABAJADAS_DISPLAY":             "HORAS TRABAJADAS",
+        "HORAS EXTRA DIURNA NORMAL_DISPLAY":    "Cant. H. Extra Diurna",
+        "HORAS EXTRA DIURNA DOM/FEST_DISPLAY":  "Cant. H. Extra Diurna Dom/Fest",
+        "HORAS EXTRA NOCTURNA NORMAL_DISPLAY":  "Cant. H. Extra Nocturna",
+        "HORAS EXTRA NOCTURNA DOM/FEST_DISPLAY":"Cant. H. Extra Nocturna Dom/Fest",
+        "RECARGO NOCTURNO NORMAL_DISPLAY":      "Cant. Recargo Nocturno",
+        "RECARGO NOCTURNO DOM/FEST_DISPLAY":    "Cant. Recargo Nocturno Dom/Fest",
+        "TOTAL HORAS EXTRA_DISPLAY":            "TOTAL HORAS EXTRA"
     }
     df_display = df_display.rename(columns=renombrar)
     
-    columnas_dinero = ["VALOR EXTRA DIURNA", "VALOR EXTRA NOCTURNA", "VALOR RECARGO NOCTURNO", 
-                       "VALOR TOTAL EXTRAS", "COMISIÓN O BONIFICACIÓN"]
+    columnas_dinero = [
+        "VALOR EXTRA DIURNA NORMAL", "VALOR EXTRA DIURNA DOM/FEST",
+        "VALOR EXTRA NOCTURNA NORMAL", "VALOR EXTRA NOCTURNA DOM/FEST",
+        "VALOR RECARGO NOCTURNO NORMAL", "VALOR RECARGO NOCTURNO DOM/FEST",
+        "VALOR TOTAL EXTRAS", "COMISIÓN O BONIFICACIÓN"
+    ]
     
     for col in columnas_dinero:
         if col in df_display.columns:
@@ -1042,13 +1083,16 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
         
         headers = [
             "CÉDULA", "NOMBRE", "CARGO", "AREA", "SALARIO BASICO", "COMISIÓN O BONIFICACIÓN",
-            "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "DÍA", "TURNO",
-            "TURNO ENTRADA", "TURNO SALIDA", "HORA REAL INGRESO", "HORA REAL SALIDA",
-            "ACTIVIDAD DESARROLLADA", "HORAS TRABAJADAS",
-            "TIPO TARIFA",                                    # ← NUEVO
-            "Cant. HORAS EXTRA DIURNA", "VALOR EXTRA DIURNA",
-            "Cant. HORAS EXTRA NOCTURNA", "VALOR EXTRA NOCTURNA",
-            "Cant. RECARGO NOCTURNO", "VALOR RECARGO NOCTURNO",
+            "TOTAL BASE LIQUIDACION", "Valor Ordinario Hora", "FECHA", "DÍA",
+            "TIPO TARIFA", "TURNO", "TURNO ENTRADA", "TURNO SALIDA",
+            "HORA REAL INGRESO", "HORA REAL SALIDA", "ACTIVIDAD DESARROLLADA",
+            "HORAS TRABAJADAS",
+            "Cant. HORAS EXTRA DIURNA",          "VALOR EXTRA DIURNA",
+            "Cant. HORAS EXTRA DIURNA DOM/FEST",  "VALOR EXTRA DIURNA DOM/FEST",
+            "Cant. HORAS EXTRA NOCTURNA",         "VALOR EXTRA NOCTURNA",
+            "Cant. HORAS EXTRA NOCTURNA DOM/FEST","VALOR EXTRA NOCTURNA DOM/FEST",
+            "Cant. RECARGO NOCTURNO",             "VALOR RECARGO NOCTURNO",
+            "Cant. RECARGO NOCTURNO DOM/FEST",    "VALOR RECARGO NOCTURNO DOM/FEST",
             "TOTAL HORAS EXTRA", "VALOR TOTAL EXTRAS",
             "MES", "MES_NOMBRE", "Observacion"
         ]
@@ -1079,6 +1123,7 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "Valor Ordinario Hora": "IMPORTE HORA",
             "FECHA": "FECHA",
             "DÍA": "DÍA",
+            "TIPO TARIFA": "TIPO TARIFA",
             "TURNO": "TURNO",
             "TURNO ENTRADA": "TURNO ENTRADA",
             "TURNO SALIDA": "TURNO SALIDA",
@@ -1086,13 +1131,18 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             "HORA REAL SALIDA": "HORA SALIDA",
             "ACTIVIDAD DESARROLLADA": "ACTIVIDAD DESARROLLADA",
             "HORAS TRABAJADAS": "HORAS TRABAJADAS",
-            "TIPO TARIFA": "TIPO TARIFA",                    # ← NUEVO
-            "Cant. HORAS EXTRA DIURNA": "HORAS EXTRA DIURNA",
-            "VALOR EXTRA DIURNA": "VALOR EXTRA DIURNA",
-            "Cant. HORAS EXTRA NOCTURNA": "HORAS EXTRA NOCTURNA",
-            "VALOR EXTRA NOCTURNA": "VALOR EXTRA NOCTURNA",
-            "Cant. RECARGO NOCTURNO": "RECARGO NOCTURNO",
-            "VALOR RECARGO NOCTURNO": "VALOR RECARGO NOCTURNO",
+            "Cant. HORAS EXTRA DIURNA":           "HORAS EXTRA DIURNA NORMAL",
+            "VALOR EXTRA DIURNA":                 "VALOR EXTRA DIURNA NORMAL",
+            "Cant. HORAS EXTRA DIURNA DOM/FEST":  "HORAS EXTRA DIURNA DOM/FEST",
+            "VALOR EXTRA DIURNA DOM/FEST":        "VALOR EXTRA DIURNA DOM/FEST",
+            "Cant. HORAS EXTRA NOCTURNA":         "HORAS EXTRA NOCTURNA NORMAL",
+            "VALOR EXTRA NOCTURNA":               "VALOR EXTRA NOCTURNA NORMAL",
+            "Cant. HORAS EXTRA NOCTURNA DOM/FEST":"HORAS EXTRA NOCTURNA DOM/FEST",
+            "VALOR EXTRA NOCTURNA DOM/FEST":      "VALOR EXTRA NOCTURNA DOM/FEST",
+            "Cant. RECARGO NOCTURNO":             "RECARGO NOCTURNO NORMAL",
+            "VALOR RECARGO NOCTURNO":             "VALOR RECARGO NOCTURNO NORMAL",
+            "Cant. RECARGO NOCTURNO DOM/FEST":    "RECARGO NOCTURNO DOM/FEST",
+            "VALOR RECARGO NOCTURNO DOM/FEST":    "VALOR RECARGO NOCTURNO DOM/FEST",
             "TOTAL HORAS EXTRA": "TOTAL HORAS EXTRA",
             "VALOR TOTAL EXTRAS": "VALOR TOTAL EXTRAS",
             "MES": "MES",
@@ -1167,25 +1217,31 @@ if input_file and empleados_file and porcentaje_file and turnos_file:
             'H': 15,  # Valor Hora
             'I': 12,  # FECHA
             'J': 12,  # DÍA
-            'K': 22,  # TURNO
-            'L': 12,  # TURNO ENTRADA
-            'M': 12,  # TURNO SALIDA
-            'N': 14,  # HORA REAL INGRESO
-            'O': 14,  # HORA REAL SALIDA
-            'P': 30,  # ACTIVIDAD
-            'Q': 12,  # HORAS TRAB
-            'R': 14,  # TIPO TARIFA  ← NUEVO
+            'K': 16,  # TIPO TARIFA
+            'L': 22,  # TURNO
+            'M': 12,  # TURNO ENTRADA
+            'N': 12,  # TURNO SALIDA
+            'O': 14,  # HORA REAL INGRESO
+            'P': 14,  # HORA REAL SALIDA
+            'Q': 30,  # ACTIVIDAD
+            'R': 12,  # HORAS TRABAJADAS
             'S': 12,  # Cant Extra Diurna
             'T': 15,  # Valor Extra Diurna
-            'U': 12,  # Cant Extra Nocturna
-            'V': 15,  # Valor Extra Nocturna
-            'W': 12,  # Cant Recargo
-            'X': 15,  # Valor Recargo
-            'Y': 12,  # Total Horas Extra
-            'Z': 18,  # Valor Total Extras
-            'AA': 10, # MES
-            'AB': 15, # MES_NOMBRE
-            'AC': 30, # Observacion
+            'U': 18,  # Cant Extra Diurna Dom/Fest
+            'V': 20,  # Valor Extra Diurna Dom/Fest
+            'W': 12,  # Cant Extra Nocturna
+            'X': 15,  # Valor Extra Nocturna
+            'Y': 18,  # Cant Extra Nocturna Dom/Fest
+            'Z': 20,  # Valor Extra Nocturna Dom/Fest
+            'AA': 12, # Cant Recargo Nocturno
+            'AB': 15, # Valor Recargo Nocturno
+            'AC': 18, # Cant Recargo Nocturno Dom/Fest
+            'AD': 20, # Valor Recargo Nocturno Dom/Fest
+            'AE': 12, # Total Horas Extra
+            'AF': 18, # Valor Total Extras
+            'AG': 10, # MES
+            'AH': 15, # MES_NOMBRE
+            'AI': 30, # Observacion
         }
         
         for col, width in column_widths.items():
