@@ -12,7 +12,7 @@ from email import encoders
 import socket  # Para manejar errores de conexión
 
 st.set_page_config(
-    page_title="Calculadora Horas Extras Fertrac",
+    page_title="CalculadoraC Horas Extras Fertrac",
     layout="wide",
     page_icon="🕒"
 )
